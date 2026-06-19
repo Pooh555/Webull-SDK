@@ -9,7 +9,11 @@
 
 class Token {
 public:
-    Token()  = default;
+    Token(
+        const std::filesystem::path& token_path,
+              CURL*                  curl,
+        const Secret&                secret,
+        const std::string_view&      host);
     ~Token() = default;
     
     void generate(

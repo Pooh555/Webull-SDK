@@ -17,8 +17,10 @@ public:
 
     void run();
 private:
-    static constexpr std::string_view HOST        = "api.webull.co.th";
-    static constexpr std::string_view SECRET_PATH = "/home/Pooh555/programming/Webull-Trading-Bot/secret.json";
+    // static constexpr std::string_view HOST        = "th-api.uat.webullbroker.com"; // Test endpoint
+    static constexpr std::string_view HOST        = "api.webull.co.th";            // Production endpoint
+    static constexpr std::string_view TOKEN_PATH  = "/home/Pooh555/programming/Webull-Trading-Bot/res/token.json";
+    static constexpr std::string_view SECRET_PATH = "/home/Pooh555/programming/Webull-Trading-Bot/res/secret.json";
 
     std::unique_ptr<Curl>   curl;
     std::unique_ptr<Secret> secret;

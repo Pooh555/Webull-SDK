@@ -17,23 +17,26 @@
 
 namespace utilities {
 
-void read_json(nlohmann::json* json, const std::filesystem::path& input_path) {
+nlohmann::json* read_json(nlohmann::json* json, const std::filesystem::path& input_path) {
     if (json == nullptr) {
         spdlog::error("[Utilities] Failed to open JSON file: {}", input_path.string());
-        return;
+        return nullptr;
     }
+
     try {
         std::ifstream in(input_path);
         
         if (!in.is_open()) {
             spdlog::error("[Utilities] Failed to open file stream for {}", input_path.string());
-            return;
+            return nullptr;
         }
 
         in >> *json;
     } catch (const std::exception& e) {
         spdlog::error("[Utilities] Exception reading {}: {}", input_path.string(), e.what());
     }
+
+    return json;
 }
 
 void write_json(const nlohmann::json& json, const std::filesystem::path& output_path) {
@@ -61,12 +64,12 @@ std::string get_utc_timestamp() {
 }
 
 std::string generate_nonce(size_t length) {
-    static constexpr std::string_view digits = "0123456789";
-    std::random_device rd;
-    std::mt19937_64 gen(rd());
+    static constexpr std::string_view     digits = "0123456789";
+    std::random_device                    rd;
+    std::mt19937_64                       gen(rd());
     std::uniform_int_distribution<size_t> dist(0, digits.size() - 1);
 
-    std::string nonce;
+    std::string nonce = "";
 
     nonce.reserve(length);
 
@@ -105,7 +108,7 @@ std::string generate_openapi_signature(
     std::string canonical       = "";
     size_t      parameters_size = parameters.size();
 
-    for (size_t i { 0 }; i < parameters_size; ++i) {
+    for (size_t i { 0uz }; i < parameters_size; ++i) {
         if (i > 0) {
             canonical += "&";
         }
@@ -133,7 +136,7 @@ std::string compute_hmac_sha1(
     const std::string& key,
     const std::string& message) {
     u_char   hash[EVP_MAX_MD_SIZE];
-    uint32_t hash_length = 0;
+    uint32_t hash_length { 0u };
 
     HMAC(
         EVP_sha1(),
@@ -196,8 +199,8 @@ std::string compute_hmac_sha256(const std::string& key, const std::string& messa
 }
 
 std::string compute_md5(const std::string& data) {
-    EVP_MD_CTX* context = EVP_MD_CTX_new();
-    const EVP_MD* md = EVP_MD_fetch(nullptr, "MD5", nullptr);
+          EVP_MD_CTX* context = EVP_MD_CTX_new();
+    const EVP_MD*     md      = EVP_MD_fetch(nullptr, "MD5", nullptr);
     
     u_char   hash[EVP_MAX_MD_SIZE];
     uint32_t length { 0u };
@@ -208,6 +211,7 @@ std::string compute_md5(const std::string& data) {
     EVP_MD_CTX_free(context);
 
     std::stringstream ss;
+
     for (uint32_t i { 0u }; i < length; ++i) {
         ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(hash[i]);
     }

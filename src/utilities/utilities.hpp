@@ -8,8 +8,8 @@
 
 namespace utilities {
     
-void read_json(nlohmann::json* json, const std::filesystem::path& input_path);
-void write_json(const nlohmann::json& json, const std::filesystem::path& output_path);
+nlohmann::json* read_json(nlohmann::json* json, const std::filesystem::path& input_path);
+void            write_json(const nlohmann::json& json, const std::filesystem::path& output_path);
 
 [[nodiscard]] std::string get_utc_timestamp();
 [[nodiscard]] std::string generate_nonce(size_t length = 0uz);

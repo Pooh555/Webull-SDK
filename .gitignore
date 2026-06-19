@@ -1,6 +1,9 @@
 # Secrets
-secret.json
-secret_list.txt
+res/secret.json
+res/secret_list.txt
+
+# Token
+res/token.json
 
 # Documentations
-llms.txt
+res/llms.txt

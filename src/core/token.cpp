@@ -6,6 +6,50 @@
 
 #include <memory>
 
+Token::Token(
+    const std::filesystem::path& token_path,
+          CURL* curl,
+    const Secret&                secret,
+    const std::string_view&      host) {
+    nlohmann::json json_data;
+    utilities::read_json(&json_data, token_path);
+
+    try {
+        token = json_data.value("token", "");
+    } catch (const std::exception& e) {
+        spdlog::critical("[Token] Failed map JSON fields to internal registry: {}", e.what());
+    }
+
+    verify(curl, secret, host);
+
+    if (get_status() != "NORMAL") {
+        spdlog::info("[Token] The current token is invalid. Generating new token...");
+
+        generate(curl, secret, host);
+
+        while (get_status() == "PENDING") {
+            spdlog::info("[Token] Token is PENDING. Please open your Webull Mobile App to approve the login");
+            
+            std::this_thread::sleep_for(std::chrono::seconds(5));
+            
+            verify(curl, secret, host);
+        }
+    }
+
+    if (get_status() != "NORMAL") {
+        spdlog::error("[Token] Token failed to activate. Status returned: {}", get_status());
+        return;
+    }   
+
+    spdlog::info("[Token] Saving newly activated token to disk...");
+    
+    json_data["token"] = this->token; 
+    
+    utilities::write_json(json_data, token_path);
+
+    spdlog::info("[Token] Successfully activated token");
+}
+
 void Token::generate(CURL* curl, const Secret& secret, const std::string_view& host) {
     if (curl == nullptr) {
         spdlog::error("[Token] Passed a null curl pointer to generate()");
