@@ -53,23 +53,25 @@ void Application::run() {
 
     std::string place_json = trading::place_order(
         curl->get_handle(),            
-        *secret.get(),                 
-        HOST,                          
-        token->get_handle(),           
-        extracted_account_id,          
-        "NORMAL",                      
-        client_order_id,               
-        "EQUITY",                      
-        "US",                          
-        "SSG",                        
-        "LIMIT",                       
-        "QTY",                         
-        "CORE",                        
-        "DAY",                         
-        "BUY",                         
-        "1",                          
-        "11.20",                      
-        ""                             
+        *secret.get(),    
+        HOST,    
+        token->get_handle(),   
+        {                              
+            .account_id              = extracted_account_id,          
+            .combo_type              = "NORMAL",                      
+            .client_order_id         = client_order_id,               
+            .instrument_type         = "EQUITY",                      
+            .market                  = "US",                          
+            .symbol                  = "SSG",                        
+            .order_type              = "LIMIT",                       
+            .entrust_type            = "QTY",                         
+            .support_trading_session = "CORE",                        
+            .time_in_force           = "DAY",                         
+            .side                    = "BUY",                         
+            .quantity                = 1.0,                          
+            .limit_price             = 11.20,                      
+            .stop_price              = std::nullopt
+        }
     );
 
     if (place_json.empty()) {
@@ -84,12 +86,14 @@ void Application::run() {
         *secret.get(),
         HOST,
         token->get_handle(),
-        extracted_account_id,
-        client_order_id,
-        "1",
-        "11.30",
-        "",
-        "DAY"
+        {
+            .account_id      = extracted_account_id,
+            .client_order_id = client_order_id,
+            .time_in_force   = "DAY",
+            .quantity        = 1.0,
+            .limit_price     = 11.30,
+            .stop_price      = std::nullopt
+        }
     );
 
     if (modify_json.empty()) {
@@ -104,7 +108,9 @@ void Application::run() {
         *secret.get(),
         HOST,
         token->get_handle(),
-        extracted_account_id,
-        client_order_id
+        {
+            .account_id      = extracted_account_id,
+            .client_order_id = client_order_id,
+        }
     );
 }

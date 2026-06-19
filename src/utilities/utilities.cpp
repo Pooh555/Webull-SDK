@@ -200,7 +200,7 @@ std::string compute_hmac_sha256(const std::string& key, const std::string& messa
 
 std::string compute_md5(const std::string& data) {
           EVP_MD_CTX* context = EVP_MD_CTX_new();
-    const EVP_MD*     md      = EVP_MD_fetch(nullptr, "MD5", nullptr);
+    const EVP_MD*     md      = EVP_md5();
     
     u_char   hash[EVP_MAX_MD_SIZE];
     uint32_t length { 0u };

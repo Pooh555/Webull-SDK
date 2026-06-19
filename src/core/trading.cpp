@@ -6,11 +6,12 @@
 #include <nlohmann/json.hpp>
 
 #include <memory>
+#include <format>
 
 namespace trading {
     
 std::string get_account_list(
-          CURL* curl,
+          CURL*             curl,
     const Secret&           secret,
     const std::string_view& host,
     const std::string&      token) {
@@ -98,24 +99,11 @@ std::string get_account_list(
 }
 
 std::string preview_order(
-    CURL* curl, 
-    const Secret&    secret, 
-    std::string_view host, 
-    std::string_view token,
-    std::string_view account_id,            
-    std::string_view combo_type,
-    std::string_view client_order_id,
-    std::string_view instrument_type,
-    std::string_view market,
-    std::string_view symbol,
-    std::string_view order_type,
-    std::string_view entrust_type,
-    std::string_view support_trading_session,
-    std::string_view time_in_force,
-    std::string_view side,
-    std::string_view quantity,
-    std::string_view limit_price,
-    std::string_view stop_price) { 
+          CURL*             curl, 
+    const Secret&           secret, 
+    const std::string_view& host, 
+    const std::string_view& token,
+    const OrderRequest&     request) { 
     if (curl == nullptr) {
         spdlog::error("[Trading] Passed a null curl pointer to preview_order()");
         return "";
@@ -129,24 +117,24 @@ std::string preview_order(
     std::string nonce     = utilities::generate_nonce(26uz);
     
     nlohmann::json order_item {
-        {"combo_type",              std::string(combo_type)},
-        {"client_order_id",         std::string(client_order_id)},
-        {"instrument_type",         std::string(instrument_type)},
-        {"market",                  std::string(market)},
-        {"symbol",                  std::string(symbol)},
-        {"order_type",              std::string(order_type)},
-        {"entrust_type",            std::string(entrust_type)},
-        {"support_trading_session", std::string(support_trading_session)},
-        {"time_in_force",           std::string(time_in_force)},
-        {"side",                    std::string(side)}
+        {"combo_type",              std::string(request.combo_type)},
+        {"client_order_id",         std::string(request.client_order_id)},
+        {"instrument_type",         std::string(request.instrument_type)},
+        {"market",                  std::string(request.market)},
+        {"symbol",                  std::string(request.symbol)},
+        {"order_type",              std::string(request.order_type)},
+        {"entrust_type",            std::string(request.entrust_type)},
+        {"support_trading_session", std::string(request.support_trading_session)},
+        {"time_in_force",           std::string(request.time_in_force)},
+        {"side",                    std::string(request.side)}
     };
 
-    if (!quantity.empty())    order_item["quantity"]    = std::string(quantity);
-    if (!limit_price.empty()) order_item["limit_price"] = std::string(limit_price);
-    if (!stop_price.empty())  order_item["stop_price"]  = std::string(stop_price);
+    if (request.quantity.has_value())    order_item["quantity"]    = std::format("{}", *request.quantity);
+    if (request.limit_price.has_value()) order_item["limit_price"] = std::format("{:.2f}", *request.limit_price);
+    if (request.stop_price.has_value())  order_item["stop_price"]  = std::format("{:.2f}", *request.stop_price);
 
     nlohmann::json root_payload {
-        {"account_id", std::string(account_id)},
+        {"account_id", std::string(request.account_id)},
         {"new_orders", nlohmann::json::array({order_item})}
     };
 
@@ -225,24 +213,11 @@ std::string preview_order(
 }
 
 std::string place_order(
-    CURL* curl, 
-    const Secret&    secret, 
-    std::string_view host, 
-    std::string_view token,
-    std::string_view account_id,            
-    std::string_view combo_type,
-    std::string_view client_order_id,
-    std::string_view instrument_type,
-    std::string_view market,
-    std::string_view symbol,
-    std::string_view order_type,
-    std::string_view entrust_type,
-    std::string_view support_trading_session,
-    std::string_view time_in_force,
-    std::string_view side,
-    std::string_view quantity,
-    std::string_view limit_price,
-    std::string_view stop_price) {
+          CURL*             curl, 
+    const Secret&           secret, 
+    const std::string_view& host, 
+    const std::string_view& token,
+    const OrderRequest&     request) {
     if (curl == nullptr) {
         spdlog::error("[Trading] Passed a null curl pointer to place_order()");
         return "";
@@ -256,24 +231,24 @@ std::string place_order(
     std::string nonce     = utilities::generate_nonce(26uz);
     
     nlohmann::json order_item {
-        {"combo_type",              std::string(combo_type)},
-        {"client_order_id",         std::string(client_order_id)},
-        {"instrument_type",         std::string(instrument_type)},
-        {"market",                  std::string(market)},
-        {"symbol",                  std::string(symbol)},
-        {"order_type",              std::string(order_type)},
-        {"entrust_type",            std::string(entrust_type)},
-        {"support_trading_session", std::string(support_trading_session)},
-        {"time_in_force",           std::string(time_in_force)},
-        {"side",                    std::string(side)}
+        {"combo_type",              std::string(request.combo_type)},
+        {"client_order_id",         std::string(request.client_order_id)},
+        {"instrument_type",         std::string(request.instrument_type)},
+        {"market",                  std::string(request.market)},
+        {"symbol",                  std::string(request.symbol)},
+        {"order_type",              std::string(request.order_type)},
+        {"entrust_type",            std::string(request.entrust_type)},
+        {"support_trading_session", std::string(request.support_trading_session)},
+        {"time_in_force",           std::string(request.time_in_force)},
+        {"side",                    std::string(request.side)}
     };
 
-    if (!quantity.empty())    order_item["quantity"]    = std::string(quantity);
-    if (!limit_price.empty()) order_item["limit_price"] = std::string(limit_price);
-    if (!stop_price.empty())  order_item["stop_price"]  = std::string(stop_price);
+    if (request.quantity.has_value())    order_item["quantity"]    = std::format("{}", *request.quantity);
+    if (request.limit_price.has_value()) order_item["limit_price"] = std::format("{:.2f}", *request.limit_price);
+    if (request.stop_price.has_value())  order_item["stop_price"]  = std::format("{:.2f}", *request.stop_price);
 
     nlohmann::json root_payload {
-        {"account_id", std::string(account_id)},
+        {"account_id", std::string(request.account_id)},
         {"new_orders", nlohmann::json::array({order_item})}
     };
 
@@ -352,16 +327,11 @@ std::string place_order(
 }
 
 std::string modify_order(
-    CURL* curl,
-    const Secret&    secret,
-    std::string_view host,
-    std::string_view token,
-    std::string_view account_id,
-    std::string_view client_order_id,
-    std::string_view quantity,
-    std::string_view limit_price,
-    std::string_view stop_price,
-    std::string_view time_in_force) {
+          CURL*             curl, 
+    const Secret&           secret, 
+    const std::string_view& host, 
+    const std::string_view& token,
+    const OrderRequest&     request) {
     if (curl == nullptr) {
         spdlog::error("[Trading] Passed a null curl pointer to modify_order()");
         return "";
@@ -375,16 +345,16 @@ std::string modify_order(
     std::string nonce     = utilities::generate_nonce(26uz);
     
     nlohmann::json modify_item {
-        {"client_order_id", std::string(client_order_id)}
+        {"client_order_id", std::string(request.client_order_id)}
     };
 
-    if (!quantity.empty())      modify_item["quantity"]      = std::string(quantity);
-    if (!limit_price.empty())   modify_item["limit_price"]   = std::string(limit_price);
-    if (!stop_price.empty())    modify_item["stop_price"]    = std::string(stop_price);
-    if (!time_in_force.empty()) modify_item["time_in_force"] = std::string(time_in_force);
+    if (request.quantity.has_value())      modify_item["quantity"]      = std::format("{}", *request.quantity);
+    if (request.limit_price.has_value())   modify_item["limit_price"]   = std::format("{:.2f}", *request.limit_price);
+    if (request.stop_price.has_value())    modify_item["stop_price"]    = std::format("{:.2f}", *request.stop_price);
+    if (!request.time_in_force.empty()) modify_item["time_in_force"] = std::string(request.time_in_force);
 
     nlohmann::json root_payload {
-        {"account_id", std::string(account_id)},
+        {"account_id", std::string(request.account_id)},
         {"modify_orders", nlohmann::json::array({modify_item})}
     };
 
@@ -463,12 +433,11 @@ std::string modify_order(
 }
 
 std::string cancel_order(
-    CURL* curl,
-    const Secret&    secret,
-    std::string_view host,
-    std::string_view token,
-    std::string_view account_id,
-    std::string_view client_order_id) {
+          CURL*             curl, 
+    const Secret&           secret, 
+    const std::string_view& host, 
+    const std::string_view& token,
+    const OrderRequest&     request) {
     if (curl == nullptr) {
         spdlog::error("[Trading] Passed a null curl pointer to cancel_order()");
         return "";
@@ -482,8 +451,8 @@ std::string cancel_order(
     std::string nonce     = utilities::generate_nonce(26uz);
     
     nlohmann::json root_payload {
-        {"account_id", std::string(account_id)},
-        {"client_order_id", std::string(client_order_id)}
+        {"account_id", std::string(request.account_id)},
+        {"client_order_id", std::string(request.client_order_id)}
     };
 
     std::string body_str = root_payload.dump();
