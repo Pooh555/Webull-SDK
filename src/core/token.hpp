@@ -9,17 +9,25 @@
 
 class Token {
 public:
-    Token() = default;
+    Token()  = default;
+    ~Token() = default;
     
-    void generate(CURL* curl, const Secret& secret);
-    void verify(CURL* curl, const Secret& secret);
+    void generate(
+              CURL*             curl, 
+        const Secret&           secret, 
+        const std::string_view& host);
+    void verify(
+              CURL*             curl, 
+        const Secret&           secret, 
+        const std::string_view& host);
 
     [[nodiscard]] std::string get_handle() const { return token; }
-    [[nodiscard]] bool is_valid() const { return !token.empty(); }
+    [[nodiscard]] std::string get_status() const { return status; }
+    [[nodiscard]] bool        is_valid()   const { return !token.empty(); }
 private:
-    static constexpr std::string_view HOST        = "th-api.uat.webullbroker.com";
     static constexpr std::string_view CREATE_PATH = "/openapi/auth/token/create";
     static constexpr std::string_view VERIFY_PATH = "/openapi/auth/token/check";
 
-    std::string token = "";
+    std::string token  = "";
+    std::string status = "";
 };

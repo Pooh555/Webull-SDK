@@ -6,12 +6,7 @@
 
 #include <memory>
 
-static size_t write_callback(void* contents, size_t size, size_t nmemb, void* userp) {
-    ((std::string*)userp)->append((char*)contents, size * nmemb);
-    return size * nmemb;
-}
-
-void Token::generate(CURL* curl, const Secret& secret) {
+void Token::generate(CURL* curl, const Secret& secret, const std::string_view& host) {
     if (curl == nullptr) {
         spdlog::error("[Token] Passed a null curl pointer to generate()");
         return;
@@ -25,12 +20,13 @@ void Token::generate(CURL* curl, const Secret& secret) {
         secret.get_secret(), 
         nonce, 
         timestamp, 
+        host,
         CREATE_PATH, 
         {}, 
         {});
 
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "POST");
-    curl_easy_setopt(curl, CURLOPT_URL, (static_cast<std::string>(HOST) + static_cast<std::string>(CREATE_PATH)).c_str());
+    curl_easy_setopt(curl, CURLOPT_URL, ("https://" + static_cast<std::string>(host) + static_cast<std::string>(CREATE_PATH)).c_str());
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_DEFAULT_PROTOCOL, "https");
 
@@ -57,7 +53,7 @@ void Token::generate(CURL* curl, const Secret& secret) {
 
     std::string response_message;
 
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, utilities::write_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_message);
 
     CURLcode response_code = curl_easy_perform(curl);
@@ -76,7 +72,9 @@ void Token::generate(CURL* curl, const Secret& secret) {
                 spdlog::debug("[Token] Response:\n{}", json_response.dump(4));
 
                 if (json_response.contains("token") && !json_response["token"].is_null()) {
-                    this->token = json_response["token"].get<std::string>();
+                    this->token  = json_response["token"].get<std::string>();
+                    this->status = json_response.value("status", "UNKNOWN");
+                    
                     spdlog::debug("[Token] Successfully assigned internal token handle.");
                 } else {
                     spdlog::warn("[Token] JSON payload was successful but missing 'token' key.");
@@ -93,9 +91,9 @@ void Token::generate(CURL* curl, const Secret& secret) {
     }
 }
 
-void Token::verify(CURL* curl, const Secret& secret) {
-    if (token == "") {
-        spdlog::warn("[Token] Token is null");
+void Token::verify(CURL* curl, const Secret& secret, const std::string_view& host) {
+    if (!is_valid()) {
+        spdlog::warn("[Token] Token is invalid");
         return;
     }
     if (curl == nullptr) {
@@ -116,12 +114,13 @@ void Token::verify(CURL* curl, const Secret& secret) {
         secret.get_secret(), 
         nonce, 
         timestamp, 
+        host,
         VERIFY_PATH, 
         {}, 
         request_body);
 
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "POST");
-    curl_easy_setopt(curl, CURLOPT_URL, (static_cast<std::string>(HOST) + static_cast<std::string>(VERIFY_PATH)).c_str());
+    curl_easy_setopt(curl, CURLOPT_URL, ("https://" + static_cast<std::string>(host) + static_cast<std::string>(VERIFY_PATH)).c_str());
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_DEFAULT_PROTOCOL, "https");
 
@@ -150,7 +149,7 @@ void Token::verify(CURL* curl, const Secret& secret) {
 
     std::string response_message = "";
 
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, utilities::write_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_message);
 
     CURLcode response_code = curl_easy_perform(curl);
@@ -165,6 +164,9 @@ void Token::verify(CURL* curl, const Secret& secret) {
             
             try {
                 auto json_response = nlohmann::json::parse(response_message);
+                
+                this->status = json_response.value("status", this->status);
+
                 spdlog::info("[Token] Verification Response:\n{}", json_response.dump(4));
             } catch (const nlohmann::json::parse_error& e) {
                 spdlog::warn("[Token] Failed to parse JSON verification response: {}", e.what());
