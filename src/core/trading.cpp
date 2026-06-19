@@ -14,7 +14,7 @@ std::string get_account_list(
           CURL*             curl,
     const Secret&           secret,
     const std::string_view& host,
-    const std::string&      token) {
+    const std::string_view& token) {
     if (curl == nullptr) {
         spdlog::error("[Trading] Passed a null curl pointer to get_account_list()");
         return "";
