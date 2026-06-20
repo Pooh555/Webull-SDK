@@ -6,8 +6,7 @@
 #include <spdlog/spdlog.h>
 
 Secret::Secret(const std::filesystem::path& secret_path) {
-    nlohmann::json json_data;
-    utilities::json::read(&json_data, secret_path);
+    nlohmann::json json_data = utilities::json::read(secret_path);
 
     try {
         id     = json_data.value("id", "");

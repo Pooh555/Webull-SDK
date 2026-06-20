@@ -10,8 +10,7 @@ Token::Token(
           CURL*                  curl,
     const Secret&                secret,
     const std::string_view&      host) {
-    nlohmann::json json_data;
-    utilities::json::read(&json_data, token_path);
+    nlohmann::json json_data = utilities::json::read(token_path);
 
     try {
         token = json_data.value("token", "");
@@ -40,9 +39,10 @@ Token::Token(
         return;
     }   
 
-    spdlog::info("[Token] Saving newly activated token to disk...");
+    spdlog::debug("[Token] Saving newly activated token to disk...");
     
     json_data["token"] = this->token; 
+    
     utilities::json::write(json_data, token_path);
 
     spdlog::info("[Token] Successfully activated token");

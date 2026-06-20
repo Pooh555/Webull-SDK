@@ -131,7 +131,7 @@ curl_slist* generate_headers(
     raw_headers = curl_slist_append(raw_headers, "x-version: v2");
     raw_headers = curl_slist_append(raw_headers, ("x-signature: " + std::string(signature)).c_str());
 
-    if (raw_headers != nullptr) spdlog::info("[Utilities] Successfully generated HTTP headers");
+    if (raw_headers != nullptr) spdlog::debug("[Utilities] Successfully generated HTTP headers");
 
     return raw_headers;
 }
