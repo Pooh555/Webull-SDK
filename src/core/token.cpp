@@ -1,7 +1,7 @@
-#include "token.hpp"
+#include <core/token.hpp>
 
-#include "utilities/http.hpp"
-#include "utilities/json.hpp"
+#include <utilities/http.hpp>
+#include <utilities/json.hpp>
 
 #include <spdlog/spdlog.h>
 

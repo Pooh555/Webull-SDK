@@ -1,7 +1,7 @@
-cmake_minimum_required(VERSION 3.16.0)
+cmake_minimum_required(VERSION 3.20.0)
 cmake_policy(SET CMP0072 NEW)
 
-project(Webull-Trading-Bot VERSION 0.1.0 LANGUAGES C CXX)
+project(Webull-SDK  VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD 26)
@@ -15,15 +15,13 @@ find_package(fmt REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(spdlog REQUIRED)
 
-add_executable(Webull-Trading-Bot 
-    src/main.cpp
-
-    src/core/application.cpp
+add_library(Webull-SDK STATIC
+    src/client/market.cpp
+    src/client/trading.cpp
+    
     src/core/curl_pool.cpp
-    src/core/market.cpp
     src/core/secret.cpp
     src/core/token.cpp
-    src/core/trading.cpp
     
     src/utilities/cryptography.cpp
     src/utilities/http.cpp
@@ -32,16 +30,26 @@ add_executable(Webull-Trading-Bot
     src/utilities/time.cpp
 )
 
-target_include_directories(Webull-Trading-Bot
+add_library(Webull::SDK ALIAS Webull-SDK)
+
+target_include_directories(Webull-SDK
+    PUBLIC 
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     PRIVATE
-        ${PROJECT_SOURCE_DIR}/lib
-        ${PROJECT_SOURCE_DIR}/src
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/lib>
 )
 
-target_link_libraries(Webull-Trading-Bot 
+target_link_libraries(Webull-SDK 
     PRIVATE 
+        spdlog::spdlog
         CURL::libcurl
         fmt::fmt
         OpenSSL::Crypto
-        spdlog::spdlog
 )
+
+option(WEBULL_BUILD_EXAMPLES "Build example applications" ON)
+
+if(WEBULL_BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()

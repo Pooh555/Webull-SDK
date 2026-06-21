@@ -1,6 +1,6 @@
-#include "secret.hpp"
+#include <core/secret.hpp>
 
-#include "utilities/json.hpp"
+#include <utilities/json.hpp>
 
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>

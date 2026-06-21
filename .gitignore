@@ -1,9 +1,5 @@
 # Secrets
-res/secret.json
-res/secret_list.txt
+examples/res
 
-# Token
-res/token.json
-
-# Documentations
-res/llms.txt
+# Build files
+/out
