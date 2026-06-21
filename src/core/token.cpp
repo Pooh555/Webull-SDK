@@ -14,17 +14,17 @@ namespace wdk::core {
 Token::Token(
     const std::filesystem::path& token_path,
           CurlPool&              pool,       
-    const Secret&                secret,
+    const Credentials&           credentials,
     const std::string_view&      host) {
     nlohmann::json json_data = wdk::utilities::read(token_path);
 
     try {
-        token = json_data.value("token", "");
+        token_ = json_data.value("token", "");
     } catch (const std::exception& e) {
         spdlog::critical("[Token] Failed map JSON fields to internal registry: {}", e.what());
     }
 
-    verify(pool, secret, host);
+    verify(pool, credentials, host);
 
     if (is_valid() && get_status() == "NORMAL") {
         spdlog::info("[Token] Successfully activated token");
@@ -32,13 +32,13 @@ Token::Token(
     } else {
         spdlog::info("[Token] The current token is invalid. Generating new token...");
 
-        generate(pool, secret, host); 
+        generate(pool, credentials, host); 
 
         while (get_status() == "PENDING") {
             spdlog::info("[Token] Token is PENDING. Please open your Webull Mobile App to approve the login");
             std::this_thread::sleep_for(std::chrono::seconds(5));
             
-            verify(pool, secret, host);
+            verify(pool, credentials, host);
         }
     }
 
@@ -49,17 +49,17 @@ Token::Token(
 
     spdlog::debug("[Token] Saving newly activated token to disk...");
 
-    json_data["token"] = this->token; 
+    json_data["token"] = this->token_; 
     
     wdk::utilities::write(json_data, token_path);
     
     spdlog::info("[Token] Successfully activated token");
 }
 
-void Token::generate(CurlPool& pool, const Secret& secret, const std::string_view& host) {
+void Token::generate(CurlPool& pool, const Credentials& credentials, const std::string_view& host) {
     std::string response_message = wdk::utilities::execute_request(
         pool, 
-        secret, 
+        credentials, 
         host, 
         CREATE_PATH, 
         wdk::utilities::HttpMethod::POST).message;
@@ -69,8 +69,8 @@ void Token::generate(CurlPool& pool, const Secret& secret, const std::string_vie
             auto json_response = nlohmann::json::parse(response_message);
 
             if (json_response.contains("token") && !json_response["token"].is_null()) {
-                this->token  = json_response["token"].get<std::string>();
-                this->status = json_response.value("status", "UNKNOWN");
+                this->token_  = json_response["token"].get<std::string>();
+                this->status_ = json_response.value("status", "UNKNOWN");
 
                 spdlog::debug("[Token] Successfully assigned internal token handle.");
             } else {
@@ -82,19 +82,19 @@ void Token::generate(CurlPool& pool, const Secret& secret, const std::string_vie
     }
 }
 
-void Token::verify(CurlPool& pool, const Secret& secret, const std::string_view& host) {
+void Token::verify(CurlPool& pool, const Credentials& credentials, const std::string_view& host) {
     if (!is_valid()) {
         spdlog::warn("[Token] Token is invalid");
         return;
     }
 
     nlohmann::json json_payload;
-    json_payload["token"] = this->token; 
+    json_payload["token"] = this->token_; 
 
     std::string request_body     = json_payload.dump();
     std::string response_message = wdk::utilities::execute_request(
         pool, 
-        secret, 
+        credentials, 
         host, 
         VERIFY_PATH, 
         wdk::utilities::HttpMethod::POST, 
@@ -104,7 +104,7 @@ void Token::verify(CurlPool& pool, const Secret& secret, const std::string_view&
         try {
             auto json_response = nlohmann::json::parse(response_message);
 
-            this->status = json_response.value("status", this->status);
+            this->status_ = json_response.value("status", this->status_);
             
             spdlog::info("[Token] Verification Response:\n{}", json_response.dump(4));
         } catch (const nlohmann::json::parse_error& e) {

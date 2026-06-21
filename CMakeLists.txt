@@ -19,8 +19,8 @@ add_library(Webull-SDK STATIC
     src/client/market.cpp
     src/client/trading.cpp
     
+    src/core/credentials.cpp
     src/core/curl_pool.cpp
-    src/core/secret.cpp
     src/core/token.cpp
     
     src/utilities/cryptography.cpp

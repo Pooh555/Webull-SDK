@@ -1,6 +1,6 @@
 #pragma once
 
-#include "secret.hpp"
+#include "core/credentials.hpp"
 #include "core/curl_pool.hpp" 
 
 #include <string>
@@ -13,7 +13,7 @@ public:
     Token(
         const std::filesystem::path& token_path,
               CurlPool&              pool,   
-        const Secret&                secret,
+        const Credentials&           credentials,
         const std::string_view&      host);
     ~Token() = default;
     
@@ -25,23 +25,23 @@ public:
 
     void generate(
               CurlPool&         pool,        
-        const Secret&           secret, 
+        const Credentials&      credentials, 
         const std::string_view& host);
 
     void verify(
               CurlPool&         pool,        
-        const Secret&           secret, 
+        const Credentials&      credentials, 
         const std::string_view& host);
 
-    [[nodiscard]] std::string get_handle() const { return token; }
-    [[nodiscard]] std::string get_status() const { return status; }
-    [[nodiscard]] bool        is_valid()   const { return !token.empty(); }
+    [[nodiscard]] std::string get_handle() const { return token_; }
+    [[nodiscard]] std::string get_status() const { return status_; }
+    [[nodiscard]] bool        is_valid()   const { return !token_.empty(); }
 private:
     static constexpr std::string_view CREATE_PATH { "/openapi/auth/token/create" };
     static constexpr std::string_view VERIFY_PATH { "/openapi/auth/token/check" };
 
-    std::string token  { "" };
-    std::string status { "" };
+    std::string token_  { "" };
+    std::string status_ { "" };
 };
 
 }

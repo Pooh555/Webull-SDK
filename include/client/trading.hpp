@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/curl_pool.hpp"
-#include "core/secret.hpp"
+#include "core/credentials.hpp"
 #include "utilities/http.hpp"
 
 #include <optional>
@@ -30,10 +30,10 @@ struct OrderRequest {
 class TradingClient {
 public:
     TradingClient(
-              wdk::core::CurlPool& pool,
-        const wdk::core::Secret&   secret, 
-              std::string_view     host, 
-              std::string_view     token);
+              wdk::core::CurlPool&    pool,
+        const wdk::core::Credentials& credentials, 
+              std::string_view        host, 
+              std::string_view        token);
     ~TradingClient() = default;
 
     wdk::utilities::Response preview_order(const OrderRequest& request);
@@ -64,11 +64,11 @@ private:
     static constexpr std::string_view MODIFY_ORDER_PATH     { "/openapi/trade/order/replace" };
     static constexpr std::string_view CANCEL_ORDER_PATH     { "/openapi/trade/order/cancel" };
 
-          std::string          account_id { "" };
-          wdk::core::CurlPool& pool_;  
-    const wdk::core::Secret&   secret_;
-          std::string          host_      { "" };
-          std::string          token_     { "" };
+          std::string             account_id { "" };
+          wdk::core::CurlPool&    pool_;  
+    const wdk::core::Credentials& credentials_;
+          std::string             host_      { "" };
+          std::string             token_     { "" };
 };
 
 }

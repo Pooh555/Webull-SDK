@@ -15,13 +15,13 @@ size_t write_callback(void* contents, size_t size, size_t nmemb, void* userp) {
 }
 
 Response execute_request(
-          wdk::core::CurlPool& pool,
-    const wdk::core::Secret&   secret,
-          std::string_view     host,
-          std::string_view     path,
-          HttpMethod           method,
-          std::string_view     body_str,
-          std::string_view     token) {
+          wdk::core::CurlPool&    pool,
+    const wdk::core::Credentials& credentials,
+          std::string_view        host,
+          std::string_view        path,
+          HttpMethod              method,
+          std::string_view        body_str,
+          std::string_view        token) {
     wdk::core::CurlPool::CurlHandle curl_guard = pool.acquire();
     CURL*                           curl       = curl_guard.get();
 
@@ -78,8 +78,8 @@ Response execute_request(
 
     const std::string signature = generate_signature(
         curl,
-        secret.get_key(),
-        secret.get_secret(),
+        credentials.get_key(),
+        credentials.get_secret(),
         nonce,
         timestamp,
         host,
@@ -102,7 +102,7 @@ Response execute_request(
     curl_easy_setopt(curl, CURLOPT_DEFAULT_PROTOCOL, "https");
 
     curl_slist* raw_headers = generate_headers(
-            secret,
+            credentials,
             timestamp,
             nonce,
             signature,
@@ -162,20 +162,20 @@ Response execute_request(
 }
 
 std::future<Response> execute_request_async(
-          wdk::core::CurlPool& pool,
-    const wdk::core::Secret&   secret,
-          std::string_view     host,
-          std::string_view     path,
-          HttpMethod           method,
-          std::string          body_str,
-          std::string          token) {
+          wdk::core::CurlPool&    pool,
+    const wdk::core::Credentials& credentials,
+          std::string_view        host,
+          std::string_view        path,
+          HttpMethod              method,
+    const std::string&            body_str,
+    const std::string&            token) {
     std::string host_str{ host };
     std::string path_str{ path };
 
     return std::async(std::launch::async, 
         [
             &pool, 
-            secret, 
+            credentials, 
             host_str = std::move(host_str), 
             path_str = std::move(path_str), 
             method, 
@@ -184,7 +184,7 @@ std::future<Response> execute_request_async(
         ]() -> Response {
             return execute_request(
                 pool, 
-                secret, 
+                credentials, 
                 host_str, 
                 path_str, 
                 method, 
@@ -196,17 +196,17 @@ std::future<Response> execute_request_async(
 }
 
 curl_slist* generate_headers(
-    const wdk::core::Secret& secret,
-          std::string_view   timestamp,
-          std::string_view   nonce,
-          std::string_view   signature,
-          std::string_view   token) {
+    const wdk::core::Credentials& credentials,
+          std::string_view        timestamp,
+          std::string_view        nonce,
+          std::string_view        signature,
+          std::string_view        token) {
     curl_slist* raw_headers = nullptr;
     
     raw_headers = curl_slist_append(raw_headers, "Accept: application/json");
     raw_headers = curl_slist_append(raw_headers, "Content-Type: application/json"); 
     raw_headers = curl_slist_append(raw_headers, "User-Agent: WebullBot/1.0 (C++23 Client)");
-    raw_headers = curl_slist_append(raw_headers, std::format("x-app-key: {}", secret.get_key()).c_str());
+    raw_headers = curl_slist_append(raw_headers, std::format("x-app-key: {}", credentials.get_key()).c_str());
     raw_headers = curl_slist_append(raw_headers, std::format("x-timestamp: {}", timestamp).c_str());
     raw_headers = curl_slist_append(raw_headers, "x-signature-version: 1.0");
     raw_headers = curl_slist_append(raw_headers, "x-signature-algorithm: HMAC-SHA1");

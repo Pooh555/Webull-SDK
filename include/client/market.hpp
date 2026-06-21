@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/curl_pool.hpp"
-#include "core/secret.hpp"
+#include "core/credentials.hpp"
 #include "core/token.hpp"
 #include "utilities/http.hpp"
 
@@ -38,10 +38,10 @@ struct TickData {
 class MarketClient {
 public:
     MarketClient(
-              wdk::core::CurlPool& pool,
-        const wdk::core::Secret&   secret, 
-              std::string_view     host  = "", 
-              std::string_view     token = "");
+              wdk::core::CurlPool&    pool,
+        const wdk::core::Credentials& credentials, 
+              std::string_view        host  = "", 
+              std::string_view        token = "");
     ~MarketClient() = default;
 
     MarketClient(const MarketClient&)            = delete;
@@ -53,10 +53,10 @@ public:
 private:
     static constexpr std::string_view TICK_PATH = "/openapi/market-data/stock/tick";
 
-          wdk::core::CurlPool& pool_;  
-    const wdk::core::Secret&   secret_;
-          std::string host_    { "" };
-          std::string token_   { "" };
+          wdk::core::CurlPool&    pool_;  
+    const wdk::core::Credentials& credentials_;
+          std::string host_       { "" };
+          std::string token_      { "" };
 };
 
 }

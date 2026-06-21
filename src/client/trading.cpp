@@ -9,16 +9,16 @@
 namespace wdk::client {
 
 TradingClient::TradingClient(
-          wdk::core::CurlPool& pool, 
-    const wdk::core::Secret&   secret, 
-          std::string_view     host, 
-          std::string_view     token)
-    : pool_(pool), secret_(secret), host_(host), token_(token) {}
+          wdk::core::CurlPool&    pool, 
+    const wdk::core::Credentials& credentials, 
+          std::string_view        host, 
+          std::string_view        token)
+    : pool_(pool), credentials_(credentials), host_(host), token_(token) {}
 
 wdk::utilities::Response TradingClient::fetch_account_list() {
     return wdk::utilities::execute_request(
         pool_,
-        secret_, 
+        credentials_, 
         host_, 
         ACCOUNT_LIST_PATH, 
         wdk::utilities::HttpMethod::GET, 
@@ -73,7 +73,7 @@ wdk::utilities::Response TradingClient::fetch_account_balance(const std::string&
 
     return wdk::utilities::execute_request(
         pool_,
-        secret_,
+        credentials_,
         host_,
         path,
         wdk::utilities::HttpMethod::GET,
@@ -96,7 +96,7 @@ wdk::utilities::Response TradingClient::fetch_account_position(const std::string
 
     return wdk::utilities::execute_request(
         pool_,
-        secret_,
+        credentials_,
         host_,
         path,
         wdk::utilities::HttpMethod::GET,
@@ -130,7 +130,7 @@ wdk::utilities::Response TradingClient::preview_order(const OrderRequest& reques
 
     return wdk::utilities::execute_request(
         pool_, 
-        secret_, 
+        credentials_, 
         host_, 
         PREVIEW_ORDER_PATH, 
         wdk::utilities::HttpMethod::POST, 
@@ -163,7 +163,7 @@ wdk::utilities::Response TradingClient::place_order(const OrderRequest& request)
 
     return wdk::utilities::execute_request(
         pool_, 
-        secret_, 
+        credentials_, 
         host_, 
         PLACE_ORDER_PATH, 
         wdk::utilities::HttpMethod::POST, 
@@ -188,7 +188,7 @@ wdk::utilities::Response TradingClient::modify_order(const OrderRequest& request
 
     return wdk::utilities::execute_request(
         pool_, 
-        secret_, 
+        credentials_, 
         host_, 
         MODIFY_ORDER_PATH, 
         wdk::utilities::HttpMethod::POST, 
@@ -204,7 +204,7 @@ wdk::utilities::Response TradingClient::cancel_order(const OrderRequest& request
 
     return wdk::utilities::execute_request(
         pool_, 
-        secret_,
+        credentials_,
         host_, 
         CANCEL_ORDER_PATH, 
         wdk::utilities::HttpMethod::POST, 
@@ -215,7 +215,7 @@ wdk::utilities::Response TradingClient::cancel_order(const OrderRequest& request
 std::future<wdk::utilities::Response> TradingClient::fetch_account_list_async() {
     return wdk::utilities::execute_request_async(
         pool_,
-        secret_, 
+        credentials_, 
         host_, 
         ACCOUNT_LIST_PATH, 
         wdk::utilities::HttpMethod::GET, 
@@ -269,7 +269,7 @@ std::future<wdk::utilities::Response> TradingClient::fetch_account_balance_async
 
     return wdk::utilities::execute_request_async(
         pool_,
-        secret_,
+        credentials_,
         host_,
         path,
         wdk::utilities::HttpMethod::GET,
@@ -291,7 +291,7 @@ std::future<wdk::utilities::Response> TradingClient::fetch_account_position_asyn
 
     return wdk::utilities::execute_request_async(
         pool_,
-        secret_,
+        credentials_,
         host_,
         path,
         wdk::utilities::HttpMethod::GET,
@@ -325,7 +325,7 @@ std::future<wdk::utilities::Response> TradingClient::preview_order_async(const O
 
     return wdk::utilities::execute_request_async(
         pool_, 
-        secret_, 
+        credentials_, 
         host_, 
         PREVIEW_ORDER_PATH, 
         wdk::utilities::HttpMethod::POST, 
@@ -359,7 +359,7 @@ std::future<wdk::utilities::Response> TradingClient::place_order_async(const Ord
 
     return wdk::utilities::execute_request_async(
         pool_, 
-        secret_, 
+        credentials_, 
         host_, 
         PLACE_ORDER_PATH, 
         wdk::utilities::HttpMethod::POST, 
@@ -385,7 +385,7 @@ std::future<wdk::utilities::Response> TradingClient::modify_order_async(const Or
 
     return wdk::utilities::execute_request_async(
         pool_, 
-        secret_, 
+        credentials_, 
         host_, 
         MODIFY_ORDER_PATH, 
         wdk::utilities::HttpMethod::POST, 
@@ -402,7 +402,7 @@ std::future<wdk::utilities::Response> TradingClient::cancel_order_async(const Or
 
     return wdk::utilities::execute_request_async(
         pool_, 
-        secret_,
+        credentials_,
         host_, 
         CANCEL_ORDER_PATH, 
         wdk::utilities::HttpMethod::POST, 

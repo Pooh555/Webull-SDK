@@ -9,12 +9,12 @@
 namespace wdk::client {
 
 MarketClient::MarketClient(
-          wdk::core::CurlPool& pool,
-    const wdk::core::Secret&   secret,
-          std::string_view     host,
-          std::string_view     token)
+          wdk::core::CurlPool&    pool,
+    const wdk::core::Credentials& credentials,
+          std::string_view       host,
+          std::string_view       token)
     : pool_(pool),
-      secret_(secret),
+      credentials_(credentials),
       host_(host),
       token_(token) {}
 
@@ -43,7 +43,7 @@ wdk::utilities::Response MarketClient::fetch_tick_data(
 
     return wdk::utilities::execute_request(
         pool_,
-        secret_,
+        credentials_,
         host_,
         path,
         wdk::utilities::HttpMethod::GET,
@@ -76,7 +76,7 @@ std::future<wdk::utilities::Response> MarketClient::fetch_tick_data_async(const 
 
     return wdk::utilities::execute_request_async(
         pool_,
-        secret_,
+        credentials_,
         host_,
         path,
         wdk::utilities::HttpMethod::GET,
