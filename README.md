@@ -72,22 +72,48 @@ wdk::client::MarketClient market_client(
     token->get_handle()
 );
 
-// Fetch tick data
-spdlog::info("[Application] Fetching tick data ...");
+// Fetch historical bar (batch) data
+spdlog::info("[Application] Fetching historical bars (batch) data...");
 
-std::future<wdk::utilities::Response> tick_future = market_client.fetch_tick_data_async({ 
-    .symbol           { "AAPL" },
-    .category         { "US_STOCK" },
-    .count            { 2uz  },
-    .trading_sessions { "PRE" }
+std::future<wdk::utilities::Response> historical_batch_bars_future = market_client.fetch_historical_batch_bars_data_async({ 
+    .symbols                 { "AAPL,NVDA" },
+    .category                { "US_STOCK" },
+    .timespan                { "M5" },
+    .count                   { 3uz },
+    .real_time_required      { false },
+    .trading_sessions        { "PRE" }
 });
-wdk::utilities::Response tick_data = tick_future.get();
+wdk::utilities::Response historical_batch_bars_data = historical_batch_bars_future.get();
 
-// Display the response
-if (tick_data.http_code == 200L) {
-    spdlog::info("[Application] Successfully fetched tick data:\n{}", nlohmann::json::parse(tick_data.message).dump(4));
+if (historical_batch_bars_data.http_code == 200L) {
+    std::vector<wdk::data::HistoricalBarsData> batch_historical_vector = wdk::data::convert_response_to_historical_bars_vector(historical_batch_bars_data);
+    
+    for (const auto& history : batch_historical_vector) {
+        nlohmann::json bars_array = nlohmann::json::array();
+        
+        for (const auto& bar : history.bars) {
+            bars_array.push_back({
+                {"time", bar.time},
+                {"open", bar.open},
+                {"high", bar.high},
+                {"low", bar.low},
+                {"close", bar.close},
+                {"volume", bar.volume},
+                {"trading_session", bar.trading_session}
+            });
+        }
+
+        spdlog::info("[Application] Successfully converted historical bars (batch) data for {}:\n{}", 
+            history.symbol,
+            nlohmann::json{
+                {"symbol", history.symbol},
+                {"instrument_id", history.instrument_id},
+                {"bars", bars_array}
+            }.dump(4)
+        );
+    }
 } else {
-    spdlog::error("[Application] Failed to fetch tick data:\n{}", nlohmann::json::parse(tick_data.message).dump(4));
+    spdlog::error("[Application] Failed to fetch historical bars (batch) data: HTTP {}", historical_batch_bars_data.http_code);
 }
 ```
 ### Trading API
