@@ -2,7 +2,7 @@
 
 # WDK
 
-### A modern C++23 client for the Webull OpenAPI
+### A modern C++23 Webull API
 
 Asynchronous · Thread-Safe · Header-Light · Built on `libcurl` & `nlohmann/json`
 
