@@ -1,6 +1,7 @@
 #include <client/market.hpp>
 
-#include <spdlog/spdlog.h>
+#include <utilities/json.hpp>
+
 #include <nlohmann/json.hpp>
 
 #include <format>

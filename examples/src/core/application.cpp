@@ -1,6 +1,7 @@
 #include "application.hpp"
 
 #include <client/trading.hpp>
+#include <data/data.hpp>
 #include <utilities/cryptography.hpp>
 #include <utilities/http.hpp>
 
@@ -22,7 +23,7 @@ Application::Application() {
 
 void Application::run() {
     market_demo();
-    trading_demo();
+    // trading_demo();
 }    
 
 void Application::market_demo() {
@@ -36,23 +37,31 @@ void Application::market_demo() {
     );
 
     // Fetch tick data
-    spdlog::info("[Application] Fetching tick data...");
-
     std::future<wdk::utilities::Response> tick_future = market_client.fetch_tick_data_async({ 
         .symbol           { "AAPL" },
         .category         { "US_STOCK" },
         .count            { 2uz  },
         .trading_sessions { "PRE" }
     });
-    wdk::utilities::Response tick_data = tick_future.get();
+    wdk::utilities::Response tick_response = tick_future.get();
 
-    if (tick_data.http_code == 200L) {
-        spdlog::info("[Application] Successfully fetched tick data:\n{}", nlohmann::json::parse(tick_data.message).dump(4));
+    if (tick_response.http_code == 200L) {
+        wdk::data::TickData tick_data = wdk::data::convert_response_to_tick_data(tick_response);
+
+        spdlog::info("[Application] Successfully fetched tick data:\n{}", 
+            nlohmann::json{
+                {"symbol", tick_data.symbol},
+                {"instrument_id", tick_data.instrument_id},
+                {"volume", tick_data.volume},
+                {"side", tick_data.side},
+                {"trading_sessions", tick_data.trading_sessions}
+            }.dump(4)
+        );
     } else {
-        spdlog::error("[Application] Failed to fetch tick data:\n{}", nlohmann::json::parse(tick_data.message).dump(4));
+        spdlog::error("[Application] Failed to fetch tick data: HTTP {}", tick_response.http_code);
     }
 
-    // Fetch snapshot data
+    // Fetch Snapshot Data
     spdlog::info("[Application] Fetching snapshot data...");
 
     std::future<wdk::utilities::Response> snapshot_future = market_client.fetch_snapshot_data_async({ 
@@ -61,12 +70,55 @@ void Application::market_demo() {
         .extended_hour_required { false },
         .overnight_required     { false }
     });
-    wdk::utilities::Response snapshot_data = snapshot_future.get();
+    
+    wdk::utilities::Response snapshot_response = snapshot_future.get();
 
-    if (snapshot_data.http_code == 200L) {
-        spdlog::info("[Application] Successfully fetched snapshot data:\n{}", nlohmann::json::parse(snapshot_data.message).dump(4));
+    if (snapshot_response.http_code == 200L) {
+        std::vector<wdk::data::SnapshotData> snapshots = wdk::data::convert_response_to_snapshot_vector(snapshot_response);
+        
+        for (const auto& snapshot : snapshots) {
+            spdlog::info("[Application] Successfully fetched snapshot data for {}:\n{}", 
+                snapshot.symbol,
+                nlohmann::json{
+                    {"symbol", snapshot.symbol},
+                    {"instrument_id", snapshot.instrument_id},
+                    {"price", snapshot.price},
+                    {"change", snapshot.change},
+                    {"change_ratio", snapshot.change_ratio},
+                    {"open", snapshot.open},
+                    {"close", snapshot.close},
+                    {"high", snapshot.high},
+                    {"low", snapshot.low},
+                    {"volume", snapshot.volume},
+                    {"pre_close", snapshot.pre_close},
+                    {"last_trade_time", snapshot.last_trade_time},
+                    {"ask", snapshot.ask},
+                    {"ask_size", snapshot.ask_size},
+                    {"bid", snapshot.bid},
+                    {"bid_size", snapshot.bid_size},
+                    {"extend_hour_last_price", snapshot.extend_hour_last_price},
+                    {"extend_hour_change", snapshot.extend_hour_change},
+                    {"extend_hour_change_ratio", snapshot.extend_hour_change_ratio},
+                    {"extend_hour_high", snapshot.extend_hour_high},
+                    {"extend_hour_low", snapshot.extend_hour_low},
+                    {"extend_hour_volume", snapshot.extend_hour_volume},
+                    {"extend_hour_last_trade_time", snapshot.extend_hour_last_trade_time},
+                    {"ovn_price", snapshot.ovn_price},
+                    {"ovn_change", snapshot.ovn_change},
+                    {"ovn_change_ratio", snapshot.ovn_change_ratio},
+                    {"ovn_high", snapshot.ovn_high},
+                    {"ovn_low", snapshot.ovn_low},
+                    {"ovn_volume", snapshot.ovn_volume},
+                    {"ovn_ask", snapshot.ovn_ask},
+                    {"ovn_ask_size", snapshot.ovn_ask_size},
+                    {"ovn_bid", snapshot.ovn_bid},
+                    {"ovn_bid_size", snapshot.ovn_bid_size},
+                    {"ovn_last_trade_time", snapshot.ovn_last_trade_time}
+                }.dump(4)
+            );
+        }
     } else {
-        spdlog::error("[Application] Failed to fetch snapshot data:\n{}", nlohmann::json::parse(snapshot_data.message).dump(4));
+        spdlog::error("[Application] Failed to fetch snapshot data: HTTP {}", snapshot_response.http_code);
     }
 
     // Fetch quotes data
@@ -78,12 +130,34 @@ void Application::market_demo() {
         .depth                  { 1u },
         .overnight_required     { false }
     });
-    wdk::utilities::Response quotes_data = quotes_future.get();
+    wdk::utilities::Response quotes_response = quotes_future.get();
 
-    if (quotes_data.http_code == 200L) {
-        spdlog::info("[Application] Successfully fetched quotes data:\n{}", nlohmann::json::parse(quotes_data.message).dump(4));
+    if (quotes_response.http_code == 200L) {
+        wdk::data::QuotesData quotes { wdk::data::convert_response_to_quotes_data(quotes_response) };
+        
+        nlohmann::json asks_array { nlohmann::json::array() };
+
+        for (const auto& ask : quotes.asks) {
+            asks_array.push_back({{"price", ask.price}, {"size", ask.size}});
+        }
+
+        nlohmann::json bids_array = nlohmann::json::array();
+
+        for (const auto& bid : quotes.bids) {
+            bids_array.push_back({{"price", bid.price}, {"size", bid.size}});
+        }
+
+        spdlog::info("[Application] Successfully fetched quotes data:\n{}", 
+            nlohmann::json{
+                {"symbol", quotes.symbol},
+                {"instrument_id", quotes.instrument_id},
+                {"quote_time", quotes.quote_time},
+                {"asks", asks_array},
+                {"bids", bids_array}
+            }.dump(4)
+        );
     } else {
-        spdlog::error("[Application] Failed to fetch quotes data:\n{}", nlohmann::json::parse(quotes_data.message).dump(4));
+        spdlog::error("[Application] Failed to fetch quotes data: HTTP {}", quotes_response.http_code);
     }
 
     // Fetch footprint data
@@ -97,16 +171,42 @@ void Application::market_demo() {
         .real_time_required      { false },
         .trading_sessions        { "PRE" }
     });
-    wdk::utilities::Response footprint_data = footprint_future.get();
+    wdk::utilities::Response footprint_response = footprint_future.get();
 
-    if (footprint_data.http_code == 200L) {
-        spdlog::info("[Application] Successfully fetched footprint data:\n{}", nlohmann::json::parse(footprint_data.message).dump(4));
+    if (footprint_response.http_code == 200L) {
+        std::vector<wdk::data::FootPrintData> footprints = wdk::data::convert_response_to_footprint_vector(footprint_response);
+        
+        for (const auto& footprint : footprints) {
+            nlohmann::json results_array { nlohmann::json::array() };
+
+            for (const auto& bar : footprint.results) {
+                results_array.push_back({
+                    {"time", bar.time},
+                    {"trading_session", bar.trading_session},
+                    {"total", bar.total},
+                    {"delta", bar.delta},
+                    {"buy_total", bar.buy_total},
+                    {"sell_total", bar.sell_total},
+                    {"buy_detail", bar.buy_detail},   // nlohmann::json automatically converts std::map into objects
+                    {"sell_detail", bar.sell_detail}  // cleanly mapping your dynamic price keys
+                });
+            }
+
+            spdlog::info("[Application] Successfully fetched footprint data for {}:\n{}", 
+                footprint.symbol,
+                nlohmann::json{
+                    {"symbol", footprint.symbol},
+                    {"instrument_id", footprint.instrument_id},
+                    {"result", results_array}
+                }.dump(4)
+            );
+        }
     } else {
-        spdlog::error("[Application] Failed to fetch footprint data:\n{}", nlohmann::json::parse(footprint_data.message).dump(4));
+        spdlog::error("[Application] Failed to fetch footprint data: HTTP {}", footprint_response.http_code);
     }
 
     // Fetch historical bar (single symbol) data
-    spdlog::info("[Application] Fetching historical bars (single symbol) data...");
+   spdlog::info("[Application] Fetching historical bars (single symbol) data...");
 
     std::future<wdk::utilities::Response> historical_bars_future = market_client.fetch_historical_bars_data_async({ 
         .symbol                  { "AAPL" },
@@ -119,13 +219,38 @@ void Application::market_demo() {
     wdk::utilities::Response historical_bars_data = historical_bars_future.get();
 
     if (historical_bars_data.http_code == 200L) {
-        spdlog::info("[Application] Successfully fetched historical bars (single symbol) data:\n{}", nlohmann::json::parse(historical_bars_data.message).dump(4));
+        std::vector<wdk::data::HistoricalBarsData> historical_vector = wdk::data::convert_response_to_historical_bars_vector(historical_bars_data);
+        
+        for (const auto& history : historical_vector) {
+            nlohmann::json bars_array = nlohmann::json::array();
+
+            for (const auto& bar : history.bars) {
+                bars_array.push_back({
+                    {"time", bar.time},
+                    {"open", bar.open},
+                    {"high", bar.high},
+                    {"low", bar.low},
+                    {"close", bar.close},
+                    {"volume", bar.volume},
+                    {"trading_session", bar.trading_session}
+                });
+            }
+
+            spdlog::info("[Application] Successfully converted historical bars (single symbol) data for {}:\n{}", 
+                history.symbol,
+                nlohmann::json{
+                    {"symbol", history.symbol},
+                    {"instrument_id", history.instrument_id},
+                    {"bars", bars_array}
+                }.dump(4)
+            );
+        }
     } else {
-        spdlog::error("[Application] Failed to fetch historical bars (single symbol) data:\n{}", nlohmann::json::parse(historical_bars_data.message).dump(4));
+        spdlog::error("[Application] Failed to fetch historical bars (single symbol) data: HTTP {}", historical_bars_data.http_code);
     }
 
     // Fetch historical bar (batch) data
-    spdlog::info("[Application] Fetching historical bars (batch)) data...");
+    spdlog::info("[Application] Fetching historical bars (batch) data...");
 
     std::future<wdk::utilities::Response> historical_batch_bars_future = market_client.fetch_historical_batch_bars_data_async({ 
         .symbols                 { "AAPL,NVDA" },
@@ -138,9 +263,34 @@ void Application::market_demo() {
     wdk::utilities::Response historical_batch_bars_data = historical_batch_bars_future.get();
 
     if (historical_batch_bars_data.http_code == 200L) {
-        spdlog::info("[Application] Successfully fetched historical bars (batch) data:\n{}", nlohmann::json::parse(historical_batch_bars_data.message).dump(4));
+        std::vector<wdk::data::HistoricalBarsData> batch_historical_vector = wdk::data::convert_response_to_historical_bars_vector(historical_batch_bars_data);
+        
+        for (const auto& history : batch_historical_vector) {
+            nlohmann::json bars_array = nlohmann::json::array();
+            
+            for (const auto& bar : history.bars) {
+                bars_array.push_back({
+                    {"time", bar.time},
+                    {"open", bar.open},
+                    {"high", bar.high},
+                    {"low", bar.low},
+                    {"close", bar.close},
+                    {"volume", bar.volume},
+                    {"trading_session", bar.trading_session}
+                });
+            }
+
+            spdlog::info("[Application] Successfully converted historical bars (batch) data for {}:\n{}", 
+                history.symbol,
+                nlohmann::json{
+                    {"symbol", history.symbol},
+                    {"instrument_id", history.instrument_id},
+                    {"bars", bars_array}
+                }.dump(4)
+            );
+        }
     } else {
-        spdlog::error("[Application] Failed to fetch historical bars (batch) data:\n{}", nlohmann::json::parse(historical_batch_bars_data.message).dump(4));
+        spdlog::error("[Application] Failed to fetch historical bars (batch) data: HTTP {}", historical_batch_bars_data.http_code);
     }
 }
 

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21.0)
 cmake_policy(SET CMP0072 NEW)
 
-project(Webull-SDK  VERSION 0.1.0 LANGUAGES C CXX)
+project(Webull-SDK  VERSION 1.0.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -26,6 +26,8 @@ add_library(Webull-SDK
     src/core/rate_limiter.cpp
     src/core/thread_pool.cpp
     src/core/token.cpp
+
+    src/data/data.cpp
     
     src/utilities/cryptography.cpp
     src/utilities/http.cpp

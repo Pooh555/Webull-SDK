@@ -53,4 +53,29 @@ void write(const nlohmann::json& json, const std::filesystem::path& output_path)
     }
 }
 
+std::string get_string_from_json(const nlohmann::json& json_obj, const char* key) {
+    if (json_obj.contains(key) && json_obj[key].is_string()) {
+        return json_obj[key].get<std::string>();
+    }
+
+    spdlog::debug("[Utilities] Failed to parse JSON key or object. The object might be intentionally null.");
+
+    return "";
+}
+
+size_t get_size_t_from_json(const nlohmann::json& json_obj, const char* key) {
+    if (!json_obj.contains(key) || json_obj[key].is_null()) return 0uz;
+    if (json_obj[key].is_number_integer())                  return json_obj[key].get<size_t>();
+    if (json_obj[key].is_string()) {
+        const std::string str   { json_obj[key].get<std::string>() };
+        size_t            value { 0uz };
+
+        auto [ptr, ec] { std::from_chars(str.data(), str.data() + str.size(), value) };
+        
+        if (ec == std::errc{}) return value;
+    }
+    
+    return 0uz;
+}
+
 }

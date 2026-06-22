@@ -13,84 +13,6 @@
 
 namespace wdk::client {
 
-struct MarketRequest {
-    std::string            symbol                 { "" };
-    std::string            symbols                { "" };
-    std::string            category               { "" };
-    std::string            timespan               { "" };
-    std::optional<size_t>  count                  { std::nullopt };
-    std::optional<bool>    real_time_required     { std::nullopt };
-    std::string            trading_sessions       { "" };
-    std::optional<uint8_t> depth                  { std::nullopt };
-    std::optional<bool>    extended_hour_required { std::nullopt };
-    std::optional<bool>    overnight_required     { std::nullopt };
-};
-
-struct TickData {
-    std::string symbol          { "" };
-    std::string instrument_id   { "" };
-    std::string volume          { "" };
-    std::string side            { "" };
-    std::string trading_sessions { "" };
-};
-
-struct SnapshotData {
-    std::string instrument_id                 { "" };
-    std::string pre_close                     { "" };
-    std::string change_ratio                  { "" };
-    std::string symbol                        { "" };
-
-    size_t last_trade_time                    { 0uz };
-
-    std::string price                         { "" };
-    std::string open                          { "" };
-    std::string close                         { "" };
-    std::string high                          { "" };
-    std::string low                           { "" };
-    std::string volume                        { "" };
-    std::string change                        { "" };
-
-    std::string ask                           { "" };
-    std::string ask_size                      { "" };
-    std::string bid                           { "" };
-    std::string bid_size                      { "" };
-
-    std::string extend_hour_last_price        { "" };
-    std::string extend_hour_high              { "" };
-    std::string extend_hour_low               { "" };
-    std::string extend_hour_change            { "" };
-    std::string extend_hour_change_ratio      { "" };
-    std::string extend_hour_volume            { "" };
-
-    size_t      extend_hour_last_trade_time   { 0uz };
-
-    std::string ovn_price                     { "" };
-    std::string ovn_high                      { "" };
-    std::string ovn_low                       { "" };
-    std::string ovn_volume                    { "" };
-    std::string ovn_change                    { "" };
-    std::string ovn_change_ratio              { "" };
-
-    size_t      ovn_last_trade_time           { 0uz };
-
-    std::string ovn_ask                       { "" };
-    std::string ovn_ask_size                  { "" };
-    std::string ovn_bid                       { "" };
-    std::string ovn_bid_size                  { "" };
-};
-
-struct QuotesData {
-
-};
-
-struct FootPrintData {
-
-};
-
-struct HistoricalBarsData {
-
-};
-
 class MarketClient {
 public:
     MarketClient(
@@ -103,6 +25,19 @@ public:
 
     MarketClient(const MarketClient&)            = delete;
     MarketClient& operator=(const MarketClient&) = delete;
+
+    struct MarketRequest {
+        std::string            symbol                 { "" };
+        std::string            symbols                { "" };
+        std::string            category               { "" };
+        std::string            timespan               { "" };
+        std::optional<size_t>  count                  { std::nullopt };
+        std::optional<bool>    real_time_required     { std::nullopt };
+        std::string            trading_sessions       { "" };
+        std::optional<uint8_t> depth                  { std::nullopt };
+        std::optional<bool>    extended_hour_required { std::nullopt };
+        std::optional<bool>    overnight_required     { std::nullopt };
+    };
 
     [[nodiscard]] wdk::utilities::Response              fetch_tick_data(const MarketRequest& request);
     [[nodiscard]] std::future<wdk::utilities::Response> fetch_tick_data_async(const MarketRequest& request);
