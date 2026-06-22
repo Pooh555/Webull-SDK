@@ -22,7 +22,9 @@ I detest Python, and, coincidentally, the official Java SDK is unreliably mainta
 ## Documentation
 This documentation is AI-generated, and may not be up-to-date cuz I'm too lazy to write. :3
 
-**Visit the full documentation here: [documenetation](docs/documentation.md)**
+**Visit the full documentation here: [Full Documenetation](docs/documentation.md)**
+
+**Visit the documentation for LLMs here: [Documenetation for AI Agents](docs/llms.txt)**
 
 ## Installation
 ### Quick Start

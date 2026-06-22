@@ -1,0 +1,796 @@
+# WDK — Webull Developer Kit
+
+> WDK is a native C++23 client library for the Webull OpenAPI. It provides fully-typed, asynchronous, cryptographically-signed access to market data and trading operations through a three-layer architecture (core → utilities → client). All blocking I/O is optional: every public method has both a synchronous and a `std::future`-returning async variant. The library targets GCC 13+ / Clang 17+ and depends on libcurl, OpenSSL (libcrypto), spdlog, and the bundled nlohmann/json.
+
+Repository: https://github.com/Pooh555/Webull-SDK  
+License: MIT (Copyright © 2025 Pooh555)  
+Language standard: C++23 (`-std=c++23`)  
+Build system: CMake + Ninja
+
+---
+
+## Quick-start
+
+Install system dependencies (Debian/Ubuntu):
+
+```sh
+sudo apt install libcurl4-openssl-dev libssl-dev libspdlog-dev cmake ninja-build
+```
+
+Build and run the bundled demo:
+
+```sh
+git clone https://github.com/Pooh555/Webull-SDK.git
+cd Webull-SDK
+./build.sh --build-type Release
+./run.sh
+```
+
+Integrate as a CMake submodule:
+
+```sh
+git submodule add https://github.com/Pooh555/Webull-SDK.git third-party/Webull-SDK
+git submodule update --init --recursive
+```
+
+```cmake
+add_subdirectory(third-party/Webull-SDK)
+target_link_libraries(MyApp PRIVATE Webull::SDK)
+```
+
+---
+
+## Architecture
+
+The codebase is partitioned into four namespaces with strict dependency ordering:
+
+```
+wdk::client      (MarketClient, TradingClient)
+      │ uses
+wdk::utilities   (execute_request, generate_signature, cryptography, time, JSON)
+      │ uses
+wdk::core        (Credentials, Token, CurlPool, ThreadPool, RateLimiter)
+
+wdk::data        (typed response structs + converters — parallel, not layered)
+```
+
+**Rule:** upper layers depend only on lower layers. `wdk::client` contains zero I/O logic; `wdk::utilities` contains zero state; `wdk::core` contains zero domain knowledge.
+
+**Ownership model:** All heavyweight resources (CurlPool, ThreadPool, Token) are held in `std::unique_ptr` by the application. Clients receive non-owning references. Clients must not outlive the resources they reference.
+
+**Concurrency:** All I/O is dispatched via `ThreadPool` (std::jthread workers). Callers receive `std::future<Response>`. `CurlPool::acquire()` blocks on a condition variable when all handles are in use, providing automatic back-pressure.
+
+---
+
+## API Endpoints
+
+| Environment | Host |
+|---|---|
+| UAT / test | `th-api.uat.webullbroker.com` |
+| Production  | `api.webull.co.th` |
+
+Switch by changing `HOST` in `examples/src/core/application.cpp`. **Never** target production during development.
+
+---
+
+## Configuration Files
+
+### `examples/res/credentials.json`
+```json
+{
+    "id":     "<app-id>",
+    "key":    "<app-key>",
+    "secret": "<app-secret>"
+}
+```
+- `id` → `x-app-id` context  
+- `key` → `x-app-key` request header  
+- `secret` → HMAC-SHA1 signing key derivation only; **never transmitted**
+
+### `examples/res/token.json`
+```json
+{ "token": "<session-token-string>" }
+```
+Written automatically on first activation. If stale, `Token` re-generates and rewrites it.
+
+---
+
+## Core Layer — `wdk::core`
+
+### `Credentials` — `<core/credentials.hpp>`
+
+Immutable application identity loaded from a JSON file.
+
+```cpp
+explicit Credentials(const std::filesystem::path& credentials_path);
+
+[[nodiscard]] const std::string& get_id()     const;
+[[nodiscard]] const std::string& get_key()    const;
+[[nodiscard]] const std::string& get_secret() const;
+```
+
+- Copyable (multiple subsystems may hold independent copies).
+- Throws `std::runtime_error` if the file cannot be parsed or fields are missing.
+
+---
+
+### `Token` — `<core/token.hpp>`
+
+Manages Webull session token lifecycle: load → verify → generate → poll → persist.
+
+```cpp
+Token(
+    const std::filesystem::path& token_path,
+          CurlPool&              pool,
+    const Credentials&           credentials,
+    const std::string_view&      host);
+
+void generate(CurlPool& pool, const Credentials& credentials, std::string_view host);
+void verify  (CurlPool& pool, const Credentials& credentials, std::string_view host);
+
+[[nodiscard]] std::string get_handle() const;   // use in x-access-token header
+[[nodiscard]] std::string get_status() const;   // "NORMAL", "PENDING", etc.
+[[nodiscard]] bool        is_valid()   const;   // true if token string is non-empty
+```
+
+**CRITICAL — Constructor is blocking.** It does not return until the token is `"NORMAL"`. If no cached token exists, the user must approve the login in the Webull mobile app. The application cannot make any API calls until `Token` construction completes.
+
+Authentication flow:
+1. Load from disk → `verify()` → if `status == "NORMAL"`: done
+2. Otherwise: `generate()` → `POST /openapi/auth/token/create`
+3. Poll `verify()` (`POST /openapi/auth/token/check`) every 5 s while `status == "PENDING"`
+4. On activation: persist token to `token_path`
+5. On failure: throw `std::runtime_error`
+
+Token is move-constructible, not copyable.
+
+Token lifecycle endpoints:
+
+| Endpoint | Method |
+|---|---|
+| `/openapi/auth/token/create` | POST |
+| `/openapi/auth/token/check`  | POST |
+
+---
+
+### `CurlPool` — `<core/curl_pool.hpp>`
+
+Bounded pool of reusable `CURL*` handles with shared DNS/SSL session caching.
+
+```cpp
+explicit CurlPool(size_t pool_size = 10uz);
+[[nodiscard]] CurlHandle acquire();   // blocks until a handle is free
+```
+
+`CurlHandle` is `std::unique_ptr<CURL, CurlReleaser>`. When it goes out of scope the handle is returned to the pool and one waiting thread is notified.
+
+Per-handle configuration:
+- `CURLOPT_TCP_KEEPALIVE`: enabled
+- `CURLOPT_TCP_KEEPIDLE`: 60 s
+- `CURLOPT_TCP_KEEPINTVL`: 30 s
+- `CURLOPT_HTTP_VERSION`: `CURL_HTTP_VERSION_2TLS`
+- `CURLOPT_SHARE`: shared `CURLSH*` (DNS + SSL sessions cached across handles)
+
+Non-copyable, non-movable.
+
+---
+
+### `ThreadPool` — `<core/thread_pool.hpp>`
+
+Fixed-size `std::jthread` executor.
+
+```cpp
+explicit ThreadPool(size_t threads = std::thread::hardware_concurrency());
+
+template<class F, class... Args>
+auto enqueue(F&& f, Args&&... args) -> std::future<std::invoke_result_t<F, Args...>>;
+```
+
+- `enqueue` wraps the callable in a `std::packaged_task`, pushes to the shared queue, and notifies one worker.
+- Throws `std::runtime_error` if called after the pool is stopped.
+- Destructor sets `stop_` flag, notifies all workers, and joins via `std::jthread`.
+
+Non-copyable, non-movable.
+
+---
+
+### `RateLimiter` — `<core/rate_limiter.hpp>`
+
+Token-bucket rate limiter.
+
+```cpp
+RateLimiter(size_t max_tokens, std::chrono::milliseconds refill_interval);
+void acquire(size_t tokens = 1uz);   // blocks until tokens are available
+```
+
+Bucket refills to `max_tokens` on each interval boundary. Note: `execute_request` also handles HTTP 429 internally with exponential backoff; `RateLimiter` is for proactive quota management at the application level.
+
+---
+
+## Utilities Layer — `wdk::utilities`
+
+### `execute_request` — `<utilities/http.hpp>`
+
+The single I/O entry point used by all client methods.
+
+```cpp
+[[nodiscard]] Response execute_request(
+          wdk::core::CurlPool&    pool,
+    const wdk::core::Credentials& credentials,
+          std::string_view        host,
+          std::string_view        path,
+          HttpMethod              method,
+          std::string_view        body_str = "",
+          std::string_view        token    = "");
+```
+
+Steps executed on each call:
+1. `CurlPool::acquire()` (blocks if all handles busy)
+2. `get_utc_timestamp()` + `generate_nonce(26)`
+3. Parse query params from `path` → assemble signing parameter set
+4. `generate_signature(...)` → HMAC-SHA1 Base64
+5. Build full URL and configure CURL handle
+6. `generate_headers(...)` wrapped in scoped `unique_ptr` for auto-`curl_slist_free_all`
+7. `curl_easy_perform`
+8. On HTTP 429: exponential backoff 500ms → 1000ms → 2000ms, retry up to 3×
+9. Return `Response{http_code, message}`
+
+`HttpMethod` enum:
+```cpp
+enum class HttpMethod : bool { GET = false, POST = true };
+```
+
+`Response` struct:
+```cpp
+struct Response {
+    long        http_code { 0L };   // HTTP code, or CURLcode if < 100
+    std::string message   { "" };   // raw response body
+};
+```
+
+Retry table:
+
+| Condition | Action |
+|---|---|
+| HTTP 200 | Return immediately |
+| HTTP 429 | Backoff 500/1000/2000 ms, retry ≤ 3× |
+| HTTP 4xx/5xx (non-429) | Return with code and body |
+| `CURLE_*` error | http_code = CURLcode (< 100), message = JSON error body |
+
+Transport errors: `http_code < 100` always means a curl-level failure, not an HTTP status.
+
+---
+
+### HTTP Headers Produced by `generate_headers`
+
+| Header | Value |
+|---|---|
+| `Accept` | `application/json` |
+| `Content-Type` | `application/json` |
+| `User-Agent` | `WebullBot/1.0 (C++23 Client)` |
+| `x-app-key` | `credentials.get_key()` |
+| `x-timestamp` | ISO 8601 UTC (`YYYY-MM-DDTHH:MM:SSZ`) |
+| `x-signature-version` | `1.0` |
+| `x-signature-algorithm` | `HMAC-SHA1` |
+| `x-signature-nonce` | 26-digit numeric string |
+| `x-access-token` | Session token (omitted when empty) |
+| `x-version` | `v2` |
+| `x-signature` | Base64-encoded HMAC-SHA1 |
+
+---
+
+### Request Signing — `generate_signature` — `<utilities/openapi.hpp>`
+
+```cpp
+[[nodiscard]] std::string generate_signature(
+          CURL*                                             curl,
+          std::string_view                                  app_key,
+          std::string_view                                  app_secret,
+          std::string_view                                  nonce,
+          std::string_view                                  timestamp,
+          std::string_view                                  host,
+          std::string_view                                  request_path,
+    const std::vector<std::pair<std::string, std::string>>& query_params,
+          std::string_view                                  request_body);
+```
+
+Signing algorithm:
+1. Merge fixed protocol params (`host`, `x-app-key`, `x-signature-algorithm`, `x-signature-nonce`, `x-signature-version`, `x-timestamp`) with query params
+2. Sort lexicographically by key
+3. Serialize to `key=value&key=value`
+4. Prepend request path: `<path>&<canonical>`
+5. If body non-empty: append `&<MD5(body)>` (uppercase hex)
+6. URL-encode with `curl_easy_escape`
+7. Signing key: `<app_secret>&`
+8. Compute `HMAC-SHA1(signing_key, url_encoded_sign_string)`, Base64-encode (no line breaks)
+
+---
+
+### Cryptography — `<utilities/cryptography.hpp>`
+
+```cpp
+[[nodiscard]] std::string compute_hmac_sha1(std::string_view key, std::string_view message);
+// → Base64-encoded HMAC-SHA1 (BIO_FLAGS_BASE64_NO_NL)
+
+[[nodiscard]] std::string compute_md5(std::string_view data);
+// → uppercase hex MD5 via OpenSSL EVP
+
+[[nodiscard]] std::string generate_nonce(size_t length = 26uz);
+// → numeric string from thread-local std::mt19937_64 seeded by std::random_device
+```
+
+`generate_nonce` uses thread-local storage; concurrent threads do not contend.
+
+---
+
+### Time — `<utilities/time.hpp>`
+
+```cpp
+[[nodiscard]] std::string get_utc_timestamp();
+// → "YYYY-MM-DDTHH:MM:SSZ" via std::chrono::utc_clock + std::format, truncated to seconds
+```
+
+---
+
+### JSON — `<utilities/json.hpp>`
+
+```cpp
+[[nodiscard]] nlohmann::json read(const std::filesystem::path& input_path);
+// → empty json{} on any failure; does not throw
+
+void write(const nlohmann::json& json, const std::filesystem::path& output_path);
+// → 4-space indent; creates parent dirs; does not throw
+
+[[nodiscard]] std::string get_string_from_json(const nlohmann::json& json_obj, const char* key);
+// → "" on absent/non-string key
+
+[[nodiscard]] size_t get_size_t_from_json(const nlohmann::json& json_obj, const char* key);
+// → 0 on absent/null/unconvertible; handles both integer and string-encoded values
+```
+
+---
+
+## Client Layer — `wdk::client`
+
+### `MarketClient` — `<client/market.hpp>`
+
+Constructor:
+```cpp
+MarketClient(
+          wdk::core::CurlPool&    pool,
+          wdk::core::ThreadPool&  thread_pool,
+    const wdk::core::Credentials& credentials,
+          std::string_view        host  = "",
+          std::string_view        token = "");
+```
+
+Non-copyable. References to `pool`, `thread_pool`, and `credentials` must outlive the client.
+
+#### `MarketRequest` fields
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `symbol` | `string` | `""` | Single-symbol endpoints |
+| `symbols` | `string` | `""` | Multi-symbol endpoints; comma-separated e.g. `"AAPL,NVDA"` |
+| `category` | `string` | `""` | e.g. `"US_STOCK"` |
+| `timespan` | `string` | `""` | Bar interval: `"M1"`, `"M5"`, `"M15"`, `"M30"`, `"H1"`, `"D1"` |
+| `count` | `optional<size_t>` | `nullopt` | Number of records to return |
+| `real_time_required` | `optional<bool>` | `nullopt` | Include real-time price |
+| `trading_sessions` | `string` | `""` | `"PRE"`, `"CORE"`, `"POST"`, `"ALL_DAY"` |
+| `depth` | `optional<uint8_t>` | `nullopt` | Order book depth levels |
+| `extended_hour_required` | `optional<bool>` | `nullopt` | Include extended-hour data |
+| `overnight_required` | `optional<bool>` | `nullopt` | Include overnight session data |
+
+Only set fields are serialised into the query string.
+
+#### Market Data Methods
+
+| Sync method | Async variant | Endpoint | HTTP | `symbol`/`symbols` |
+|---|---|---|---|---|
+| `fetch_tick_data` | `fetch_tick_data_async` | `/openapi/market-data/stock/tick` | GET | `symbol` |
+| `fetch_snapshot_data` | `fetch_snapshot_data_async` | `/openapi/market-data/stock/snapshot` | GET | `symbols` |
+| `fetch_quotes_data` | `fetch_quotes_data_async` | `/openapi/market-data/stock/quotes` | GET | `symbol` |
+| `fetch_footprint_data` | `fetch_footprint_data_async` | `/openapi/market-data/stock/footprint` | GET | `symbol` |
+| `fetch_historical_bars_data` | `fetch_historical_bars_data_async` | `/openapi/market-data/stock/bars` | GET | `symbol` |
+| `fetch_historical_batch_bars_data` | `fetch_historical_batch_bars_data_async` | `/openapi/market-data/stock/batch-bars` | POST | `symbols` |
+
+All async variants return `std::future<wdk::utilities::Response>`.
+
+---
+
+### `TradingClient` — `<client/trading.hpp>`
+
+Constructor:
+```cpp
+TradingClient(
+          wdk::core::CurlPool&    pool,
+          wdk::core::ThreadPool&  thread_pool,
+    const wdk::core::Credentials& credentials,
+          std::string_view        host,
+          std::string_view        token);
+```
+
+Non-copyable. Same lifetime rules as `MarketClient`.
+
+#### `OrderRequest` fields
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `account_id` | `string` | Yes | From `get_account_id()` |
+| `combo_type` | `string` | Yes | `"NORMAL"` for single-leg |
+| `client_order_id` | `string` | Yes | Caller-generated nonce; use `generate_nonce()` |
+| `instrument_type` | `string` | Yes | `"EQUITY"` for stocks |
+| `market` | `string` | Yes | `"US"` |
+| `symbol` | `string` | Yes | Ticker, e.g. `"AAPL"` |
+| `order_type` | `string` | Yes | `"LIMIT"`, `"MARKET"`, `"STOP"`, `"STOP_LIMIT"` |
+| `entrust_type` | `string` | Yes | `"QTY"` for quantity-based |
+| `trading_session` | `string` | Yes | `"CORE"`, `"PRE"`, `"POST"`, `"ALL_DAY"` |
+| `time_in_force` | `string` | Yes | `"DAY"`, `"GTC"`, `"IOC"`, `"FOK"` |
+| `side` | `string` | Yes | `"BUY"` or `"SELL"` |
+| `quantity` | `optional<double>` | Yes | Shares; serialised as string in JSON |
+| `limit_price` | `optional<double>` | LIMIT/STOP_LIMIT | 2 decimal places in JSON |
+| `stop_price` | `optional<double>` | STOP/STOP_LIMIT | 2 decimal places in JSON |
+
+#### Order Management Methods
+
+| Sync method | Endpoint | HTTP |
+|---|---|---|
+| `preview_order` | `/openapi/trade/order/preview` | POST |
+| `place_order` | `/openapi/trade/order/place` | POST |
+| `modify_order` | `/openapi/trade/order/replace` | POST |
+| `cancel_order` | `/openapi/trade/order/cancel` | POST |
+
+`modify_order` accepts only: `account_id`, `client_order_id`, `quantity`, `limit_price`, `stop_price`, `time_in_force`. Only set fields are included in the payload.  
+`cancel_order` requires only `account_id` and `client_order_id`.
+
+#### `QueryRequest` fields
+
+| Field | Type | Notes |
+|---|---|---|
+| `account_id` | `string` | Target account |
+| `symbols` | `string` | Comma-separated tickers |
+| `category` | `string` | Asset category |
+| `status` | `string` | Order status filter |
+| `last_instrument_id` | `string` | Pagination cursor |
+| `start_date` | `string` | `"YYYY-MM-DD"` |
+| `page_size` | `optional<size_t>` | Records per page |
+| `last_client_id` | `string` | Pagination cursor |
+| `client_order_id` | `string` | Target a specific order |
+
+#### Order Query Methods
+
+| Sync method | Endpoint | HTTP |
+|---|---|---|
+| `fetch_stock_instrument` | `/openapi/instrument/stock/list` | GET |
+| `fetch_order_history` | `/openapi/trade/order/history` | GET |
+| `fetch_open_order` | `/openapi/trade/order/open` | GET |
+| `fetch_order_detail` | `/openapi/trade/order/detail` | GET |
+
+#### Account Methods
+
+| Sync method | Endpoint | HTTP | Notes |
+|---|---|---|---|
+| `fetch_account_list` | `/openapi/account/list` | GET | Lists all accounts |
+| `fetch_account_balance` | `/openapi/assets/balance` | GET | Cash and buying power |
+| `fetch_account_position` | `/openapi/assets/positions` | GET | Open positions |
+| `get_account_id()` | — | — | Calls `fetch_account_list`, caches the first account ID; subsequent calls return cached value |
+
+---
+
+## Data Layer — `wdk::data` — `<data/data.hpp>`
+
+All conversion functions accept `wdk::utilities::Response` by value. They call `nlohmann::json::parse(..., nullptr, false)` (no-throw mode) and return a default-constructed result on failure.
+
+All numeric/monetary fields are `std::string` — precision is preserved exactly as the API returns it. Callers needing arithmetic should use a decimal library.
+
+### Data Structures
+
+**`TickData`**  
+Fields: `symbol`, `instrument_id`, `volume`, `side` (`"BUY"`/`"SELL"`), `trading_sessions`
+
+**`SnapshotData`**  
+Fields: `symbol`, `instrument_id`, `price`, `open`, `close`, `high`, `low`, `volume`, `change`, `change_ratio`, `pre_close`, `last_trade_time`, `ask`, `ask_size`, `bid`, `bid_size`, extended-hour OHLCV and bid/ask fields, overnight session `ovn_*` equivalents
+
+**`QuoteLevel`** (one order-book level)  
+Fields: `price`, `size`
+
+**`QuotesData`**  
+Fields: `symbol`, `instrument_id`, `quote_time` (Unix ms), `asks` (`vector<QuoteLevel>`), `bids` (`vector<QuoteLevel>`)
+
+**`FootPrintBar`** (per OHLCV bar with volume decomposition)  
+Fields: `time`, `trading_session`, `total`, `delta`, `buy_total`, `sell_total`, `buy_detail` (`map<string,string>`), `sell_detail` (`map<string,string>`)
+
+**`FootPrintData`** — collection of `FootPrintBar` for one symbol
+
+**`Bar`** (OHLCV)  
+Fields: `time`, `open`, `high`, `low`, `close`, `volume`, `trading_session`
+
+**`HistoricalBarsData`** — collection of `Bar` for one symbol
+
+### Conversion Functions
+
+| Function | Return type | Notes |
+|---|---|---|
+| `convert_response_to_tick_data` | `TickData` | Extracts first tick from `result[]` |
+| `convert_response_to_snapshot_data` | `SnapshotData` | Handles array root / `result[]` / `data[]` / bare object schemas |
+| `convert_response_to_snapshot_vector` | `vector<SnapshotData>` | Batch; same schema variants |
+| `convert_response_to_quotes_data` | `QuotesData` | Parses `asks[]` and `bids[]` |
+| `convert_response_to_footprint_vector` | `vector<FootPrintData>` | Includes `buy_detail` / `sell_detail` maps |
+| `convert_response_to_historical_bars_vector` | `vector<HistoricalBarsData>` | Handles single-symbol array and multi-symbol `result[]` schemas |
+
+---
+
+## Error Handling
+
+### HTTP Status Codes
+
+| Code | SDK behaviour |
+|---|---|
+| 200 | Return `Response` with body |
+| 400 | Return `Response`; body logged |
+| 401 | Return `Response`; check token validity |
+| 403 | Return `Response`; check account permissions |
+| 404 | Return `Response` |
+| 429 | Auto-retry with exponential backoff (500ms / 1000ms / 2000ms, max 3×); after 3 failures returns synthetic 429 `Response` |
+| 500+ | Return `Response`; body logged |
+
+### Canonical Response Checking Pattern
+
+```cpp
+wdk::utilities::Response response = /* sync call or future.get() */;
+
+if (response.http_code == 200L) {
+    auto data = wdk::data::convert_response_to_*(response);
+    // use data
+} else {
+    spdlog::error("HTTP {}: {}", response.http_code, response.message);
+}
+```
+
+### Transport Errors
+
+`response.http_code < 100` → curl-level failure (the value is a `CURLcode`).  
+`response.message` will contain a JSON error body like `{"error": "..."}`.
+
+### Constructor Exceptions
+
+| Constructor | Exception | Condition |
+|---|---|---|
+| `Credentials` | `std::runtime_error` | File unreadable or fields missing |
+| `Token` | `std::runtime_error` | Token fails to reach `"NORMAL"` |
+| `ThreadPool::enqueue` | `std::runtime_error` | Pool already stopped |
+
+---
+
+## Canonical Initialisation Sequence
+
+```cpp
+#include <core/credentials.hpp>
+#include <core/curl_pool.hpp>
+#include <core/thread_pool.hpp>
+#include <core/token.hpp>
+#include <client/market.hpp>
+#include <client/trading.hpp>
+
+static constexpr std::string_view HOST             { "api.webull.co.th" };
+static constexpr std::string_view TOKEN_PATH       { "examples/res/token.json" };
+static constexpr std::string_view CREDENTIALS_PATH { "examples/res/credentials.json" };
+
+// 1. Allocate in dependency order: pool and credentials before token
+auto curl_pool   = std::make_unique<wdk::core::CurlPool>(10uz);
+auto thread_pool = std::make_unique<wdk::core::ThreadPool>();
+auto credentials = std::make_unique<wdk::core::Credentials>(CREDENTIALS_PATH);
+
+// 2. Token constructor BLOCKS until session is "NORMAL"
+auto token = std::make_unique<wdk::core::Token>(
+    TOKEN_PATH, *curl_pool, *credentials, HOST
+);
+
+// 3. Construct clients (non-owning references; clients must not outlive resources)
+wdk::client::MarketClient  market_client (*curl_pool, *thread_pool, *credentials, HOST, token->get_handle());
+wdk::client::TradingClient trading_client(*curl_pool, *thread_pool, *credentials, HOST, token->get_handle());
+```
+
+---
+
+## Usage Examples
+
+### Tick data (async)
+
+```cpp
+auto future = market_client.fetch_tick_data_async({
+    .symbol           { "AAPL" },
+    .category         { "US_STOCK" },
+    .count            { 2uz },
+    .trading_sessions { "PRE" }
+});
+auto response = future.get();
+if (response.http_code == 200L) {
+    auto tick = wdk::data::convert_response_to_tick_data(response);
+}
+```
+
+### Multi-symbol snapshot (async)
+
+```cpp
+auto future = market_client.fetch_snapshot_data_async({
+    .symbols                { "AAPL,NVDA,MSFT" },
+    .category               { "US_STOCK" },
+    .extended_hour_required { false },
+    .overnight_required     { false }
+});
+auto snaps = wdk::data::convert_response_to_snapshot_vector(future.get());
+```
+
+### Level 2 order book
+
+```cpp
+auto future = market_client.fetch_quotes_data_async({
+    .symbol             { "AAPL" },
+    .category           { "US_STOCK" },
+    .depth              { 5u },
+    .overnight_required { false }
+});
+auto quotes = wdk::data::convert_response_to_quotes_data(future.get());
+// quotes.asks, quotes.bids — vector<QuoteLevel>
+```
+
+### Historical OHLCV bars — single symbol
+
+```cpp
+auto future = market_client.fetch_historical_bars_data_async({
+    .symbol             { "AAPL" },
+    .category           { "US_STOCK" },
+    .timespan           { "M5" },
+    .count              { 100uz },
+    .real_time_required { false },
+    .trading_sessions   { "CORE" }
+});
+auto history = wdk::data::convert_response_to_historical_bars_vector(future.get());
+for (const auto& sym : history)
+    for (const auto& bar : sym.bars) { /* bar.time, bar.open, ..., bar.volume */ }
+```
+
+### Full order lifecycle (sync)
+
+```cpp
+const std::string account_id      = trading_client.get_account_id();
+const std::string client_order_id = wdk::utilities::generate_nonce();
+
+// Always preview first
+auto preview = trading_client.preview_order({
+    .account_id      { account_id },
+    .combo_type      { "NORMAL" },
+    .client_order_id { client_order_id },
+    .instrument_type { "EQUITY" },
+    .market          { "US" },
+    .symbol          { "NVDA" },
+    .order_type      { "LIMIT" },
+    .entrust_type    { "QTY" },
+    .trading_session { "CORE" },
+    .time_in_force   { "DAY" },
+    .side            { "BUY" },
+    .quantity        { 1.0 },
+    .limit_price     { 135.00 }
+});
+
+if (preview.http_code == 200L) {
+    trading_client.place_order({
+        /* identical fields as preview */
+    });
+}
+
+// Modify open order
+trading_client.modify_order({
+    .account_id      { account_id },
+    .client_order_id { client_order_id },
+    .time_in_force   { "DAY" },
+    .quantity        { 1.0 },
+    .limit_price     { 134.50 }
+});
+
+// Cancel
+trading_client.cancel_order({
+    .account_id      { account_id },
+    .client_order_id { client_order_id }
+});
+```
+
+### Account queries
+
+```cpp
+// get_account_id() caches after first call
+const std::string account_id = trading_client.get_account_id();
+
+auto balance   = trading_client.fetch_account_balance_async(account_id).get();
+auto positions = trading_client.fetch_account_position_async(account_id).get();
+auto history   = trading_client.fetch_order_history_async({
+    .account_id { account_id },
+    .start_date { "2026-01-01" },
+    .page_size  { 50uz }
+}).get();
+```
+
+---
+
+## Build System Reference
+
+### CMake Presets (`CMakePresets.json`)
+
+| Preset | Generator | Build Type | Use |
+|---|---|---|---|
+| `debug` | Make | Debug | Compatibility fallback |
+| `debug-ninja` | Ninja | Debug | **Recommended for development** |
+| `release` | Ninja | Release | Production |
+
+All presets: `CC=gcc`, `CXX=g++`, `CMAKE_EXPORT_COMPILE_COMMANDS=ON`.  
+Output: `out/build/<preset>/`, install prefix: `out/install/<preset>/`.
+
+### `build.sh` flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `-b, --build-type <type>` | `Debug` | `Debug`, `Release`, `RelWithDebInfo` |
+| `-c, --clean` | off | Remove build dir before building |
+| `-h, --help` | — | Print usage and exit |
+
+The script runs `set -euo pipefail` and installs a trap to report the exit code on failure.
+
+### LSP / clangd integration
+
+```sh
+ln -sf out/build/debug-ninja/compile_commands.json compile_commands.json
+```
+
+---
+
+## Project Structure
+
+```
+Webull-SDK/
+├── include/
+│   ├── client/
+│   │   ├── market.hpp          # MarketClient, MarketRequest
+│   │   └── trading.hpp         # TradingClient, OrderRequest, QueryRequest
+│   ├── core/
+│   │   ├── credentials.hpp
+│   │   ├── curl_pool.hpp
+│   │   ├── rate_limiter.hpp
+│   │   ├── thread_pool.hpp
+│   │   └── token.hpp
+│   ├── data/
+│   │   └── data.hpp            # All typed structs + converter declarations
+│   └── utilities/
+│       ├── cryptography.hpp    # HMAC-SHA1, MD5, generate_nonce
+│       ├── http.hpp            # execute_request, Response, HttpMethod
+│       ├── json.hpp            # read, write, get_string_from_json, get_size_t_from_json
+│       ├── openapi.hpp         # generate_signature
+│       └── time.hpp            # get_utc_timestamp
+├── src/                        # Corresponding .cpp implementations
+├── examples/
+│   ├── bin/                    # Compiled demo binary
+│   ├── res/
+│   │   ├── credentials.json    # NOT committed — populate before first run
+│   │   └── token.json          # NOT committed — auto-generated on first auth
+│   └── src/core/application.cpp
+├── lib/nlohmann/               # Bundled nlohmann/json (header-only)
+├── CMakeLists.txt
+├── CMakePresets.json
+├── build.sh
+└── run.sh
+```
+
+---
+
+## Key Invariants for AI Agents
+
+1. **Object lifetime:** `CurlPool`, `ThreadPool`, and `Credentials` must outlive any `Token`, `MarketClient`, or `TradingClient` that references them.
+2. **Token construction blocks:** Do not spin a timeout around it — blocking is by design. The mobile approval step is user-interactive.
+3. **`http_code < 100` means curl failure, not HTTP.** Check this before treating the response as an HTTP error.
+4. **Numeric fields are strings.** Never cast `response.message` JSON numbers directly to `double` for prices — use the converter functions which return `std::string` fields.
+5. **`symbols` vs `symbol`:** Batch endpoints (snapshot, batch-bars) use `MarketRequest::symbols` with comma separation. Single-instrument endpoints use `MarketRequest::symbol`.
+6. **Always preview before placing.** `preview_order` validates the request and returns estimated costs without executing. Placing without preview risks rejected orders or unexpected fills.
+7. **`client_order_id` must be unique per order.** Generate with `wdk::utilities::generate_nonce()` for each new order. Reuse the same value to refer to an existing order (modify, cancel, detail).
+8. **`get_account_id()` is cached after the first call.** Calling it multiple times is safe and cheap; only the first invocation performs I/O.
+9. **Thread safety:** `CurlPool` and `ThreadPool` are thread-safe. `Token` is read-only after construction. Do not call `Token::generate` or `Token::verify` concurrently.
+10. **UAT first.** All development and testing must target `th-api.uat.webullbroker.com`. Production (`api.webull.co.th`) executes against live brokerage accounts.
