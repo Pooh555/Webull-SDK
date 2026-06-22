@@ -207,7 +207,7 @@ auto future = client.place_order_async({
     .symbol                  = "AAPL",
     .order_type              = "LIMIT",
     .entrust_type            = "QTY",
-    .support_trading_session = "CORE",
+    .support_trading_sessions = "CORE",
     .time_in_force           = "DAY",
     .side                    = "BUY",
     .quantity                = 1.0,
@@ -226,7 +226,7 @@ auto tick_future = market.fetch_tick_data_async({
     .symbol          = "AAPL",
     .category        = "US_STOCK",
     .count           = 2,
-    .trading_session = "PRE"
+    .trading_sessions = "PRE"
 });
 
 wdk::utilities::Response ticks = tick_future.get();
@@ -320,7 +320,7 @@ struct OrderRequest {
     std::string           symbol;
     std::string           order_type;
     std::string           entrust_type;
-    std::string           support_trading_session;
+    std::string           support_trading_sessions;
     std::string           time_in_force;
     std::string           side;
     std::optional<double> quantity;
@@ -349,7 +349,7 @@ struct MarketRequest {
     std::string           symbol;
     std::string           category;
     std::optional<size_t> count;
-    std::string           trading_session;
+    std::string           trading_sessions;
 };
 ```
 Calls `GET /openapi/market-data/stock/tick`, with non-empty fields appended as URL query parameters.

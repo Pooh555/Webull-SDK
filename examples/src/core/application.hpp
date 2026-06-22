@@ -31,5 +31,6 @@ private:
     std::unique_ptr<wdk::core::Credentials> credentials;
     std::unique_ptr<wdk::core::Token>       token;
 
-    void demo();
+    void market_demo();
+    void trading_demo();
 };
