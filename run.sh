@@ -34,7 +34,6 @@ if [[ ! -f "${DEMO_BIN}" ]]; then
     exit 1
 fi
 
-# Ensure the binary has execution permissions
 if [[ ! -x "${DEMO_BIN}" ]]; then
     log_info "Adding execution permissions to the binary..."
     chmod +x "${DEMO_BIN}"

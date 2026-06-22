@@ -23,8 +23,8 @@ public:
 private:
     // static constexpr std::string_view HOST        = "th-api.uat.webullbroker.com"; // Test endpoint
     static constexpr std::string_view HOST             { "api.webull.co.th" };            // Production endpoint
-    static constexpr std::string_view TOKEN_PATH       { "/home/Pooh555/programming/Webull-SDK/examples/res/token.json" };
-    static constexpr std::string_view CREDENTIALS_PATH { "/home/Pooh555/programming/Webull-SDK/examples/res/credentials.json" };
+    static constexpr std::string_view TOKEN_PATH       { "examples/res/token.json" };
+    static constexpr std::string_view CREDENTIALS_PATH { "examples/res/credentials.json" };
 
     std::unique_ptr<wdk::core::CurlPool>    curl_pool;
     std::unique_ptr<wdk::core::ThreadPool>  thread_pool;

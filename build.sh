@@ -14,7 +14,6 @@ CLEAN_BUILD=0
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # --- Logging Utilities ---
-# Tput for terminal colors
 GREEN=$(tput setaf 2 || echo "")
 BLUE=$(tput setaf 4 || echo "")
 RED=$(tput setaf 1 || echo "")
@@ -52,7 +51,6 @@ while [[ "$#" -gt 0 ]]; do
     shift
 done
 
-# Format build directory string (e.g., out/build/debug-ninja)
 BUILD_DIR="${PROJECT_ROOT}/out/build/${BUILD_TYPE,,}-ninja"
 
 # --- Pre-flight Checks ---
@@ -81,11 +79,10 @@ cmake -B "${BUILD_DIR}" -G Ninja \
 
 log_success "CMake configuration completed."
 
-# Determine number of CPU cores for parallel build
 if command -v nproc >/dev/null 2>&1; then
     CORES=$(nproc)
 else
-    CORES=4 # Fallback
+    CORES=4
 fi
 
 log_info "Building Webull-SDK and Examples using ${CORES} parallel jobs..."

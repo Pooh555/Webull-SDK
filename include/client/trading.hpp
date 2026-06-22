@@ -28,6 +28,14 @@ struct OrderRequest {
     std::optional<double> stop_price              { std::nullopt };  
 };
 
+struct QueryRequest {
+    std::string           account_id      { "" };
+    std::string           start_date      { "" };
+    std::optional<size_t> page_size       { std::nullopt };
+    std::string           last_client_id  { "" };
+    std::string           client_order_id { "" };
+};
+
 class TradingClient {
 public:
     TradingClient(
@@ -47,6 +55,13 @@ public:
     wdk::utilities::Response              cancel_order(const OrderRequest& request);
     std::future<wdk::utilities::Response> cancel_order_async(const OrderRequest& request);
 
+    [[nodiscard]] wdk::utilities::Response              fetch_order_history(const QueryRequest& request);
+    [[nodiscard]] std::future<wdk::utilities::Response> fetch_order_history_async(const QueryRequest& request);
+    [[nodiscard]] wdk::utilities::Response              fetch_open_order(const QueryRequest& request);
+    [[nodiscard]] std::future<wdk::utilities::Response> fetch_open_order_async(const QueryRequest& request);
+    [[nodiscard]] wdk::utilities::Response              fetch_order_detail(const QueryRequest& request);
+    [[nodiscard]] std::future<wdk::utilities::Response> fetch_order_detail_async(const QueryRequest& request);
+
     [[nodiscard]] std::string                           get_account_id();
     [[nodiscard]] wdk::utilities::Response              fetch_account_list();
     [[nodiscard]] std::future<wdk::utilities::Response> fetch_account_list_async();
@@ -54,14 +69,19 @@ public:
     [[nodiscard]] std::future<wdk::utilities::Response> fetch_account_balance_async(const std::string& account_id);
     [[nodiscard]] wdk::utilities::Response              fetch_account_position(const std::string& account_id);
     [[nodiscard]] std::future<wdk::utilities::Response> fetch_account_position_async(const std::string& account_id);    
-private:
+private:    
+    static constexpr std::string_view PREVIEW_ORDER_PATH { "/openapi/trade/order/preview" };
+    static constexpr std::string_view PLACE_ORDER_PATH   { "/openapi/trade/order/place" };
+    static constexpr std::string_view MODIFY_ORDER_PATH  { "/openapi/trade/order/replace" };
+    static constexpr std::string_view CANCEL_ORDER_PATH  { "/openapi/trade/order/cancel" };
+
+    static constexpr std::string_view ORDER_HISTORY_PATH { "/openapi/trade/order/history" };
+    static constexpr std::string_view OPEN_ORDER_PATH    { "/openapi/trade/order/open" };
+    static constexpr std::string_view ORDER_DETAIL_PATH  { "/openapi/trade/order/detail" };
+
     static constexpr std::string_view ACCOUNT_LIST_PATH     { "/openapi/account/list" };
     static constexpr std::string_view ACCOUNT_BALANCE_PATH  { "/openapi/assets/balance" };
     static constexpr std::string_view ACCOUNT_POSITION_PATH { "/openapi/assets/positions" };
-    static constexpr std::string_view PREVIEW_ORDER_PATH    { "/openapi/trade/order/preview" };
-    static constexpr std::string_view PLACE_ORDER_PATH      { "/openapi/trade/order/place" };
-    static constexpr std::string_view MODIFY_ORDER_PATH     { "/openapi/trade/order/replace" };
-    static constexpr std::string_view CANCEL_ORDER_PATH     { "/openapi/trade/order/cancel" };
     
           std::string             account_id_  { "" };
           wdk::core::CurlPool&    pool_;  

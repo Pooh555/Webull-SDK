@@ -22,7 +22,7 @@ Application::Application() {
 
 void Application::run() {
     market_demo();
-    // trading_demo();
+    trading_demo();
 }    
 
 void Application::market_demo() {
@@ -36,7 +36,7 @@ void Application::market_demo() {
     );
 
     // Fetch tick data
-    spdlog::info("[Application] Fetching tick data ...");
+    spdlog::info("[Application] Fetching tick data...");
 
     std::future<wdk::utilities::Response> tick_future = market_client.fetch_tick_data_async({ 
         .symbol           { "AAPL" },
@@ -53,7 +53,7 @@ void Application::market_demo() {
     }
 
     // Fetch snapshot data
-    spdlog::info("[Application] Fetching snapshot data ...");
+    spdlog::info("[Application] Fetching snapshot data...");
 
     std::future<wdk::utilities::Response> snapshot_future = market_client.fetch_snapshot_data_async({ 
         .symbols                { "AAPL,NVDA" },
@@ -70,7 +70,7 @@ void Application::market_demo() {
     }
 
     // Fetch quotes data
-    spdlog::info("[Application] Fetching quotes data ...");
+    spdlog::info("[Application] Fetching quotes data...");
 
     std::future<wdk::utilities::Response> quotes_future = market_client.fetch_quotes_data_async({ 
         .symbol                 { "AAPL" },
@@ -87,7 +87,7 @@ void Application::market_demo() {
     }
 
     // Fetch footprint data
-    spdlog::info("[Application] Fetching footprint data ...");
+    spdlog::info("[Application] Fetching footprint data...");
 
     std::future<wdk::utilities::Response> footprint_future = market_client.fetch_footprint_data_async({ 
         .symbols                 { "AAPL,NVDA" },
@@ -106,7 +106,7 @@ void Application::market_demo() {
     }
 
     // Fetch historical bar (single symbol) data
-    spdlog::info("[Application] Fetching historical bars (single symbol) data ...");
+    spdlog::info("[Application] Fetching historical bars (single symbol) data...");
 
     std::future<wdk::utilities::Response> historical_bars_future = market_client.fetch_historical_bars_data_async({ 
         .symbol                  { "AAPL" },
@@ -125,7 +125,7 @@ void Application::market_demo() {
     }
 
     // Fetch historical bar (batch) data
-    spdlog::info("[Application] Fetching historical bars (batch)) data ...");
+    spdlog::info("[Application] Fetching historical bars (batch)) data...");
 
     std::future<wdk::utilities::Response> historical_batch_bars_future = market_client.fetch_historical_batch_bars_data_async({ 
         .symbols                 { "AAPL,NVDA" },
@@ -155,12 +155,12 @@ void Application::trading_demo() {
     );
 
     // Extract account id
-    const std::string extracted_account_id = client.get_account_id();
+    const std::string account_id = client.get_account_id();
 
     // Fetch account balance
     spdlog::info("[Application] Dispatching balance request...");
 
-    std::future<wdk::utilities::Response> account_balance_future  = client.fetch_account_balance_async(extracted_account_id);
+    std::future<wdk::utilities::Response> account_balance_future  = client.fetch_account_balance_async(account_id);
     wdk::utilities::Response              account_balance         = account_balance_future.get();
 
     if (account_balance.http_code == 200L) {
@@ -172,7 +172,7 @@ void Application::trading_demo() {
     // Fetch account position
     spdlog::info("[Application] Dispatching position request...");
 
-    std::future<wdk::utilities::Response> account_position_future = client.fetch_account_position_async(extracted_account_id);
+    std::future<wdk::utilities::Response> account_position_future = client.fetch_account_position_async(account_id);
     wdk::utilities::Response              account_position        = account_position_future.get();
     
     if (account_position.http_code == 200L) {
@@ -188,7 +188,7 @@ void Application::trading_demo() {
     spdlog::info("[Application] Dispatching order placement...");
 
     std::future<wdk::utilities::Response> place_order_future = client.place_order_async({
-        .account_id              { extracted_account_id },          
+        .account_id              { account_id },          
         .combo_type              { "NORMAL" },                      
         .client_order_id         { client_order_id },               
         .instrument_type         { "EQUITY" },                      
@@ -196,11 +196,11 @@ void Application::trading_demo() {
         .symbol                  { "NVDA" },
         .order_type              { "LIMIT" },
         .entrust_type            { "QTY" },
-        .trading_session         { "ALL_DAY" },                        
+        .trading_session         { "CORE" },                        
         .time_in_force           { "DAY" },
         .side                    { "BUY" },
         .quantity                { 1.0 },
-        .limit_price             { 200.05 },
+        .limit_price             { 100.05 },
         .stop_price              { std::nullopt }
     });
     wdk::utilities::Response place_order = place_order_future.get();
@@ -211,15 +211,17 @@ void Application::trading_demo() {
         spdlog::error("[Application] Failed to place order:\n {}", nlohmann::json::parse(place_order.message).dump(4));
     }
 
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+
     // Modify an order
     spdlog::info("[Application] Modifying placed order reference: {}", client_order_id);
     
     std::future<wdk::utilities::Response> modify_order_future = client.modify_order_async({
-        .account_id      { extracted_account_id },
+        .account_id      { account_id },
         .client_order_id { client_order_id },
         .time_in_force   { "DAY" }, 
         .quantity        { 1.0 },
-        .limit_price     { 200.15 },
+        .limit_price     { 100.15 },
         .stop_price      { std::nullopt }
     });
     wdk::utilities::Response modify_order = modify_order_future.get();
@@ -230,12 +232,14 @@ void Application::trading_demo() {
         spdlog::error("[Application] Failed to modify order:\n {}", nlohmann::json::parse(modify_order.message).dump(4));
     }
 
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+
     // Cancel an order
     spdlog::info("[Application] Cancelling order reference: {}", client_order_id);
     
     std::future<wdk::utilities::Response> cancel_order_future = client.cancel_order_async({
-        .account_id      = extracted_account_id,
-        .client_order_id = client_order_id,
+        .account_id      { account_id },
+        .client_order_id { client_order_id },
     });
     wdk::utilities::Response cancel_order = cancel_order_future.get();
     
@@ -243,5 +247,53 @@ void Application::trading_demo() {
         spdlog::info("[Application] Successfully canceled order:\n {}", nlohmann::json::parse(cancel_order.message).dump(4));
     } else {
         spdlog::error("[Application] Failed to cancel order:\n {}", nlohmann::json::parse(cancel_order.message).dump(4));
+    }
+
+    // Fetch order history
+    spdlog::info("[Application] Fetching order history...");
+    
+    std::future<wdk::utilities::Response> order_history_future = client.fetch_order_history_async({
+        .account_id     { account_id },
+        .start_date     { "2026-05-01" },
+        .page_size      { 10uz },
+        .last_client_id { client_order_id }
+    });
+    wdk::utilities::Response order_history_data = order_history_future.get();
+    
+    if (order_history_data.http_code == 200L) {
+        spdlog::info("[Application] Successfully fetched order history:\n {}", nlohmann::json::parse(order_history_data.message).dump(4));
+    } else {
+        spdlog::error("[Application] Failed to fetched order history:\n {}", nlohmann::json::parse(order_history_data.message).dump(4));
+    }
+
+    // Fetch open order
+    spdlog::info("[Application] Fetching open order...");
+    
+    std::future<wdk::utilities::Response> open_order_future = client.fetch_open_order_async({
+        .account_id     { account_id },
+        .page_size      { 10uz },
+        .last_client_id { client_order_id }
+    });
+    wdk::utilities::Response open_order_data = open_order_future.get();
+    
+    if (open_order_data.http_code == 200L) {
+        spdlog::info("[Application] Successfully fetched open order:\n {}", nlohmann::json::parse(open_order_data.message).dump(4));
+    } else {
+        spdlog::error("[Application] Failed to fetched open order:\n {}", nlohmann::json::parse(open_order_data.message).dump(4));
+    }
+
+    // Fetch order detail
+    spdlog::info("[Application] Fetching order detail...");
+    
+    std::future<wdk::utilities::Response> order_detail_future = client.fetch_order_detail_async({
+        .account_id      { account_id },
+        .client_order_id { client_order_id }
+    });
+    wdk::utilities::Response order_detail_data = order_detail_future.get();
+    
+    if (order_detail_data.http_code == 200L) {
+        spdlog::info("[Application] Successfully fetched order detail:\n {}", nlohmann::json::parse(order_detail_data.message).dump(4));
+    } else {
+        spdlog::error("[Application] Failed to fetched order detail:\n {}", nlohmann::json::parse(order_detail_data.message).dump(4));
     }
 }

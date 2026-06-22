@@ -229,6 +229,159 @@ std::string TradingClient::get_account_id() {
     return account_id_;
 }
 
+wdk::utilities::Response TradingClient::fetch_order_history(const QueryRequest& request) {
+    std::string path { ORDER_HISTORY_PATH };
+
+    bool first_parameter { true };
+
+    auto append_parameter = [&](std::string_view key, std::string_view value) {
+        if (value.empty()) return;
+        path           += first_parameter ? '?' : '&';
+        path           += std::format("{}={}", key, value);
+        first_parameter = false;
+    };
+
+    append_parameter("account_id", request.account_id);
+    append_parameter("start_date", request.start_date);
+   
+    if (request.page_size.has_value()) {
+        append_parameter("page_size", std::to_string(request.page_size.value()));
+    }
+
+    append_parameter("last_client_order_id", request.last_client_id);
+
+    return wdk::utilities::execute_request(
+        pool_,
+        credentials_,
+        host_,
+        path,
+        wdk::utilities::HttpMethod::GET,
+        "",
+        token_
+    );
+}
+
+std::future<wdk::utilities::Response> TradingClient::fetch_order_history_async(const QueryRequest& request) {
+    std::string path { ORDER_HISTORY_PATH };
+
+    bool first_parameter { true };
+
+    auto append_parameter = [&](std::string_view key, std::string_view value) {
+        if (value.empty()) return;
+        path           += first_parameter ? '?' : '&';
+        path           += std::format("{}={}", key, value);
+        first_parameter = false;
+    };
+
+    append_parameter("account_id", request.account_id);
+
+    if (request.page_size.has_value()) {
+        append_parameter("page_size", std::to_string(request.page_size.value()));
+    }
+
+    append_parameter("last_client_order_id", request.last_client_id);
+    
+    return execute_request_async(path, wdk::utilities::HttpMethod::GET);
+}
+
+wdk::utilities::Response TradingClient::fetch_open_order(const QueryRequest& request) {
+    std::string path { OPEN_ORDER_PATH };
+
+    bool first_parameter { true };
+
+    auto append_parameter = [&](std::string_view key, std::string_view value) {
+        if (value.empty()) return;
+        path           += first_parameter ? '?' : '&';
+        path           += std::format("{}={}", key, value);
+        first_parameter = false;
+    };
+
+    append_parameter("account_id", request.account_id);
+
+    if (request.page_size.has_value()) {
+        append_parameter("page_size", std::to_string(request.page_size.value()));
+    }
+
+    append_parameter("last_client_order_id", request.last_client_id);
+
+    return wdk::utilities::execute_request(
+        pool_,
+        credentials_,
+        host_,
+        path,
+        wdk::utilities::HttpMethod::GET,
+        "",
+        token_
+    );
+}
+
+std::future<wdk::utilities::Response> TradingClient::fetch_open_order_async(const QueryRequest& request) {
+    std::string path { OPEN_ORDER_PATH };
+
+    bool first_parameter { true };
+
+    auto append_parameter = [&](std::string_view key, std::string_view value) {
+        if (value.empty()) return;
+        path           += first_parameter ? '?' : '&';
+        path           += std::format("{}={}", key, value);
+        first_parameter = false;
+    };
+
+    append_parameter("account_id", request.account_id);
+    
+    if (request.page_size.has_value()) {
+        append_parameter("page_size", std::to_string(request.page_size.value()));
+    }
+
+    append_parameter("last_client_order_id", request.last_client_id);
+    
+    return execute_request_async(path, wdk::utilities::HttpMethod::GET);
+}
+
+wdk::utilities::Response TradingClient::fetch_order_detail(const QueryRequest& request) {
+    std::string path { ORDER_DETAIL_PATH };
+
+    bool first_parameter { true };
+
+    auto append_parameter = [&](std::string_view key, std::string_view value) {
+        if (value.empty()) return;
+        path           += first_parameter ? '?' : '&';
+        path           += std::format("{}={}", key, value);
+        first_parameter = false;
+    };
+
+    append_parameter("account_id", request.account_id);
+    append_parameter("client_order_id", request.client_order_id);
+
+    return wdk::utilities::execute_request(
+        pool_,
+        credentials_,
+        host_,
+        path,
+        wdk::utilities::HttpMethod::GET,
+        "",
+        token_
+    );
+}
+
+std::future<wdk::utilities::Response> TradingClient::fetch_order_detail_async(const QueryRequest& request) {
+    std::string path { ORDER_DETAIL_PATH };
+
+    bool first_parameter { true };
+
+    auto append_parameter = [&](std::string_view key, std::string_view value) {
+        if (value.empty()) return;
+        path           += first_parameter ? '?' : '&';
+        path           += std::format("{}={}", key, value);
+        first_parameter = false;
+    };
+
+    append_parameter("account_id", request.account_id);
+    append_parameter("client_order_id", request.client_order_id);
+    
+    return execute_request_async(path, wdk::utilities::HttpMethod::GET);
+}
+
 wdk::utilities::Response TradingClient::fetch_account_list() {
     return wdk::utilities::execute_request(
         pool_,
